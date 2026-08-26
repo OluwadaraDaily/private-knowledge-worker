@@ -1,7 +1,7 @@
 from sqlalchemy.types import UserDefinedType
 
 
-class Vector(UserDefinedType):
+class Vector(UserDefinedType[list[float]]):
     """Unbounded pgvector type; dimensions are validated per index configuration."""
 
     cache_ok = True

@@ -31,7 +31,7 @@ class IndexConfig(Base):
     chunk_overlap: Mapped[int | None] = mapped_column(Integer)
     embedding_model: Mapped[str] = mapped_column(String(255), nullable=False)
     embedding_dimensions: Mapped[int] = mapped_column(Integer, nullable=False)
-    retrieval_config: Mapped[dict | None] = mapped_column(JSON)
+    retrieval_config: Mapped[dict[str, object] | None] = mapped_column(JSON)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )

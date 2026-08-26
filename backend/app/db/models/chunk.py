@@ -27,6 +27,6 @@ class Chunk(Base):
     heading: Mapped[str | None] = mapped_column(Text)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     token_count: Mapped[int | None] = mapped_column(Integer)
-    chunk_metadata: Mapped[dict | None] = mapped_column("metadata", JSON)
+    chunk_metadata: Mapped[dict[str, object] | None] = mapped_column("metadata", JSON)
     embedding: Mapped[list[float] | None] = mapped_column(Vector())
     created_at: Mapped[datetime] = created_at_column()
