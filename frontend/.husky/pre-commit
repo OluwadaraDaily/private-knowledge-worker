@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+
+cd frontend
+./node_modules/.bin/lint-staged
