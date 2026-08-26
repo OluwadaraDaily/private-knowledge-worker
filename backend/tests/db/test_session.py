@@ -6,7 +6,7 @@ from app.db.session import get_database_url, get_engine
 
 
 def test_database_url_requires_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("DATABASE_URL", "")
     get_settings.cache_clear()
 
     with pytest.raises(RuntimeError, match="DATABASE_URL is not configured"):

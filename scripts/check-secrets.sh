@@ -9,6 +9,8 @@ PATTERN='-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(sk|pk|rk)-[A-Za-z0-9_-]{20,}\b|\b
 
 MATCHES=$(rg -l --hidden \
 	--glob '!.git/**' \
+	--glob '!.env' \
+	--glob '!.env.*' \
 	--glob '!node_modules/**' \
 	--glob '!frontend/dist/**' \
 	--glob '!backend/.venv/**' \

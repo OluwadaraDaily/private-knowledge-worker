@@ -66,4 +66,4 @@ migrate:
 		echo 'Database migrations are not configured yet (planned in F-004).'; \
 		exit 1; \
 	fi
-	$(PYTHON_BIN)/alembic upgrade head
+	$(PYTHON_BIN)/alembic -c $(BACKEND_DIR)/alembic.ini upgrade head
