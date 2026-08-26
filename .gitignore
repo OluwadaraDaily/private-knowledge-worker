@@ -1,5 +1,8 @@
 # Local planning and personal project notes
 /personal_docs/
+.env
+.env.*
+!.env.example
 
 # Python
 __pycache__/

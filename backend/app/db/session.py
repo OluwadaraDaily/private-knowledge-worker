@@ -1,4 +1,3 @@
-import os
 from collections.abc import Generator
 from functools import lru_cache
 
@@ -6,14 +5,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-DATABASE_URL_ENV = "DATABASE_URL"
+from app.core.config import get_settings
 
 
 def get_database_url() -> str:
     """Return the configured database URL or fail with an actionable message."""
-    database_url = os.getenv(DATABASE_URL_ENV)
+    database_url = get_settings().database_url
     if not database_url:
-        raise RuntimeError(f"{DATABASE_URL_ENV} is not configured")
+        raise RuntimeError("DATABASE_URL is not configured")
     return database_url
 
 
