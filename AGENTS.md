@@ -59,4 +59,5 @@
 - If present, read both files before coding. Use the order file to find the first eligible unchecked item and the feature file to confirm its complete scope.
 - Implement only the next meaningful reviewable chunk unless the user explicitly selects another item.
 - Update both trackers after the definition of done is met and human validation is confirmed.
+- Check a feature's **Feature complete** checkbox in `FEATURES.md` as soon as all of its required sub-features are complete and validated; apply this consistently to every subsequent feature.
 - If either file is absent, ignore it without error and continue from the repository and the user's current instructions.
