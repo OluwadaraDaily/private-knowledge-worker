@@ -30,7 +30,7 @@ def test_engine_is_created_lazily_from_database_url(
 
 def test_test_database_url_is_required_and_isolated(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://dev")
-    monkeypatch.delenv("TEST_DATABASE_URL", raising=False)
+    monkeypatch.setenv("TEST_DATABASE_URL", "")
     get_settings.cache_clear()
 
     with pytest.raises(RuntimeError, match="TEST_DATABASE_URL is not configured"):

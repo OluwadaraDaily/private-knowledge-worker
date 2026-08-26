@@ -1,21 +1,29 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 
 import App from './App'
 
 describe('App', () => {
-  it('renders the starter page and updates the counter', () => {
+  it('reports when the backend is available', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue({ ok: true, json: async () => ({ status: 'ok' }) }),
+    )
     render(<App />)
 
-    const counter = screen.getByRole('button', { name: 'Count is 0' })
-    expect(
-      screen.getByRole('heading', { name: 'Get started' }),
-    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByText('Backend is available.')).toBeInTheDocument(),
+    )
+  })
 
-    fireEvent.click(counter)
+  it('reports when the backend is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
+    render(<App />)
 
-    expect(
-      screen.getByRole('button', { name: 'Count is 1' }),
-    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByText(/Backend is unavailable/)).toBeInTheDocument(),
+    )
   })
 })

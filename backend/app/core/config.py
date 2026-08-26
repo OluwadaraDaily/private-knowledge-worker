@@ -19,7 +19,10 @@ class Settings(BaseSettings):
     test_database_url: str | None = None
     backend_url: AnyHttpUrl = AnyHttpUrl("http://127.0.0.1:8000")
     frontend_url: AnyHttpUrl = AnyHttpUrl("http://127.0.0.1:5173")
-    cors_origins: list[AnyHttpUrl] = [AnyHttpUrl("http://127.0.0.1:5173")]
+    cors_origins: list[AnyHttpUrl] = [
+        AnyHttpUrl("http://localhost:5173"),
+        AnyHttpUrl("http://127.0.0.1:5173"),
+    ]
 
 
 @lru_cache(maxsize=1)
