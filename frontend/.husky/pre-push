@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+
+set -eu
+
+ROOT_DIR=$(git rev-parse --show-toplevel)
+"$ROOT_DIR/scripts/check-secrets.sh"
+"$ROOT_DIR/scripts/check-debug-statements.sh"
+make -C "$ROOT_DIR" lint typecheck test build
