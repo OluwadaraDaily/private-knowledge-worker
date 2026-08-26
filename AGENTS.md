@@ -51,4 +51,12 @@
 
 ## 10. Document recurring mistakes
 
-- If the same mistake or failure pattern recurs, add a concise rule or note to `agents.md` to prevent it from happening again.
+- If the same mistake or failure pattern recurs, add a concise rule or note to `AGENTS.md` to prevent it from happening again.
+
+## 11. Resume from local project trackers when available
+
+- At the start of a new implementation session, check for `personal_docs/FEATURES.md` and `personal_docs/FEATURE_ORDER_OF_IMPLEMENTATION.md`.
+- If present, read both files before coding. Use the order file to find the first eligible unchecked item and the feature file to confirm its complete scope.
+- Implement only the next meaningful reviewable chunk unless the user explicitly selects another item.
+- Update both trackers after the definition of done is met and human validation is confirmed.
+- If either file is absent, ignore it without error and continue from the repository and the user's current instructions.
