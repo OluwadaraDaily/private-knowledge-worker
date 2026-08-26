@@ -1,2 +1,7 @@
 # Local planning and personal project notes
 /personal_docs/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/

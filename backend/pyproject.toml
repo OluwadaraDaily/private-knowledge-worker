@@ -1,0 +1,15 @@
+[project]
+name = "private-knowledge-worker-backend"
+version = "0.1.0"
+description = "FastAPI backend for Private Knowledge Worker"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard-no-fastapi-cloud-cli]>=0.116,<1.0",
+]
+
+[tool.fastapi]
+entrypoint = "app.main:app"
+
+[tool.uv]
+package = false
