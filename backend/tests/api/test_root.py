@@ -1,7 +1,11 @@
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import AnyHttpUrl
 
+from app.api.routes import google_auth as google_auth_module
+from app.core.config import Settings
 from app.db.models.google_connection import GoogleConnection
 from app.db.session import get_session
 from app.main import create_app
@@ -130,3 +134,46 @@ def test_google_disconnect_clears_cookie_and_commits() -> None:
     assert response.status_code == 204
     assert 'google_connection_id="";' in response.headers["set-cookie"]
     assert session.commits == 1
+
+
+def test_google_callback_redirects_to_frontend_after_authorization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = create_app()
+    connection = GoogleConnection(
+        id=uuid4(),
+        user_id=uuid4(),
+        google_account_id="google-id",
+        email="user@example.com",
+        scopes=["openid"],
+    )
+    session = ConnectionSession(None)
+    app.dependency_overrides[get_session] = lambda: session
+    monkeypatch.setattr(google_auth_module, "consume_oauth_state", lambda *_args: True)
+    monkeypatch.setattr(
+        google_auth_module,
+        "get_settings",
+        lambda: Settings(
+            frontend_url=AnyHttpUrl("http://localhost:5173"),
+            environment="development",
+        ),
+    )
+    monkeypatch.setattr(google_auth_module, "exchange_authorization_code", lambda *_args: {})
+    monkeypatch.setattr(
+        google_auth_module,
+        "persist_google_credentials",
+        lambda *_args: connection,
+    )
+
+    try:
+        with TestClient(app, follow_redirects=False) as test_client:
+            test_client.cookies.set("oauth_state", "valid-state")
+            response = test_client.get(
+                "/api/v1/auth/google/callback?code=auth-code&state=valid-state"
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "http://localhost:5173"
+    assert "google_connection_id=" in response.headers["set-cookie"]

@@ -2,7 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query
-from fastapi.responses import JSONResponse, RedirectResponse, Response
+from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -77,7 +77,10 @@ def complete_google_oauth(
         raise HTTPException(
             status_code=502, detail="Google authorization failed"
         ) from exchange_error
-    response = JSONResponse({"status": "authorized"})
+    response = RedirectResponse(
+        url=str(settings.frontend_url).rstrip("/"),
+        status_code=303,
+    )
     response.set_cookie(
         GOOGLE_CONNECTION_COOKIE,
         str(persisted_connection.id),
