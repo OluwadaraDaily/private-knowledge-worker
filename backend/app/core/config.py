@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     frontend_url: AnyHttpUrl = AnyHttpUrl("http://127.0.0.1:5173")
     oauth_client_id: str | None = None
     oauth_client_secret: str | None = None
+    token_encryption_key: str | None = None
     oauth_scopes: list[str] = [
         "openid",
         "email",
