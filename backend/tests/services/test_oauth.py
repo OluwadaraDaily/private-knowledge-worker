@@ -1,16 +1,18 @@
 from datetime import UTC, datetime
+from typing import cast
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import AnyHttpUrl
+from sqlalchemy.orm import Session
 
 from app.api import router as router_module
 from app.core.config import Settings
 from app.db.models.oauth_state import OAuthState
 from app.db.session import get_session
 from app.main import create_app
-from app.services.oauth import create_oauth_authorization_url
+from app.services.oauth import consume_oauth_state, create_oauth_authorization_url
 
 
 class FakeSession:
@@ -24,6 +26,15 @@ class FakeSession:
     def commit(self) -> None:
         self.commits += 1
 
+    def scalar(self, statement: object) -> OAuthState | None:
+        del statement
+        return self.records[0] if self.records else None
+
+    def execute(self, statement: object) -> object:
+        del statement
+        self.records.clear()
+        return object()
+
 
 def test_create_oauth_authorization_url_stores_hashed_expiring_state() -> None:
     session = FakeSession()
@@ -32,9 +43,9 @@ def test_create_oauth_authorization_url_stores_hashed_expiring_state() -> None:
         oauth_client_id="client-id",
     )
 
-    authorization_url = create_oauth_authorization_url(session, settings)
+    authorization = create_oauth_authorization_url(cast(Session, session), settings)
 
-    parsed = urlparse(authorization_url)
+    parsed = urlparse(authorization.url)
     query = parse_qs(parsed.query)
     raw_state = query["state"][0]
 
@@ -57,7 +68,16 @@ def test_create_oauth_authorization_url_requires_client_id() -> None:
     settings = Settings(oauth_client_id="")
 
     with pytest.raises(ValueError, match="OAuth client ID is not configured"):
-        create_oauth_authorization_url(FakeSession(), settings)
+        create_oauth_authorization_url(cast(Session, FakeSession()), settings)
+
+
+def test_consume_oauth_state_is_one_time() -> None:
+    session = FakeSession()
+    settings = Settings(oauth_client_id="client-id")
+    authorization = create_oauth_authorization_url(cast(Session, session), settings)
+
+    assert consume_oauth_state(cast(Session, session), authorization.state) is True
+    assert consume_oauth_state(cast(Session, session), authorization.state) is False
 
 
 def test_start_google_oauth_redirects_to_google(monkeypatch: pytest.MonkeyPatch) -> None:

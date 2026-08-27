@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
@@ -8,7 +8,12 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db.session import get_session
-from app.services.oauth import create_oauth_authorization_url
+from app.services.oauth import (
+    OAuthExchangeError,
+    consume_oauth_state,
+    create_oauth_authorization_url,
+    exchange_authorization_code,
+)
 
 
 class ApiInfo(BaseModel):
@@ -41,9 +46,41 @@ def start_google_oauth(
     session: Annotated[Session, Depends(get_session)],
 ) -> RedirectResponse:
     try:
-        authorization_url = create_oauth_authorization_url(session, get_settings())
+        authorization = create_oauth_authorization_url(session, get_settings())
     except ValueError as error:
         raise HTTPException(status_code=503, detail="Google OAuth is not configured") from error
     except SQLAlchemyError as error:
         raise HTTPException(status_code=503, detail="OAuth authorization is unavailable") from error
-    return RedirectResponse(url=authorization_url, status_code=307)
+    response = RedirectResponse(url=authorization.url, status_code=307)
+    response.set_cookie(
+        "oauth_state",
+        authorization.state,
+        max_age=600,
+        httponly=True,
+        secure=get_settings().environment == "production",
+        samesite="lax",
+    )
+    return response
+
+
+@api_router.get("/auth/google/callback", summary="Complete Google OAuth authorization")
+def complete_google_oauth(
+    session: Annotated[Session, Depends(get_session)],
+    code: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+    oauth_state: str | None = Cookie(default=None),
+) -> dict[str, str]:
+    if error:
+        raise HTTPException(status_code=400, detail="Google authorization was denied")
+    if not code or not state or state != oauth_state:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+    try:
+        if not consume_oauth_state(session, state):
+            raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
+        exchange_authorization_code(get_settings(), code)
+    except OAuthExchangeError as exchange_error:
+        raise HTTPException(
+            status_code=502, detail="Google authorization failed"
+        ) from exchange_error
+    return {"status": "authorized"}
