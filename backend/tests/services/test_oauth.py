@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from pydantic import AnyHttpUrl
 from sqlalchemy.orm import Session
 
-from app.api import router as router_module
+from app.api.routes import google_auth as google_auth_module
 from app.core.config import Settings
 from app.db.models.oauth_state import OAuthState
 from app.db.session import get_session
@@ -85,7 +85,7 @@ def test_start_google_oauth_redirects_to_google(monkeypatch: pytest.MonkeyPatch)
     application = create_app()
     application.dependency_overrides[get_session] = lambda: session
     monkeypatch.setattr(
-        router_module,
+        google_auth_module,
         "get_settings",
         lambda: Settings(
             backend_url=AnyHttpUrl("http://127.0.0.1:8000"),
