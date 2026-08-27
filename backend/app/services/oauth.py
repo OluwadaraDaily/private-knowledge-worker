@@ -12,6 +12,8 @@ from app.core.config import Settings
 from app.db.models.oauth_state import OAuthState
 
 OAUTH_AUTHORIZATION_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 OAUTH_STATE_TTL = timedelta(minutes=10)
 
 
@@ -19,6 +21,75 @@ OAUTH_STATE_TTL = timedelta(minutes=10)
 class OAuthAuthorization:
     url: str
     state: str
+
+
+class OAuthExchangeError(Exception):
+    """Raised when Google rejects an OAuth request or response."""
+
+
+class GoogleOAuthClient:
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+
+    def exchange_code(self, code: str) -> dict[str, object]:
+        return self._post_token(
+            {
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": self._redirect_uri(),
+            },
+            "Google authorization-code exchange failed",
+        )
+
+    def refresh_access_token(self, refresh_token: str) -> dict[str, object]:
+        return self._post_token(
+            {
+                "refresh_token": refresh_token,
+                "grant_type": "refresh_token",
+            },
+            "Google access-token refresh failed",
+        )
+
+    def user_info(self, access_token: str) -> dict[str, object]:
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get(
+                    GOOGLE_USERINFO_URL,
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+                response.raise_for_status()
+                user_info = response.json()
+        except (httpx.HTTPError, ValueError) as error:
+            raise OAuthExchangeError(
+                "Google account information could not be retrieved"
+            ) from error
+        if not isinstance(user_info, dict):
+            raise OAuthExchangeError("Google returned invalid account information")
+        return user_info
+
+    def _post_token(self, data: dict[str, str], failure_message: str) -> dict[str, object]:
+        if not self.settings.oauth_client_id or not self.settings.oauth_client_secret:
+            raise OAuthExchangeError("OAuth client credentials are not configured")
+        request_data = {
+            "client_id": self.settings.oauth_client_id,
+            "client_secret": self.settings.oauth_client_secret,
+            **data,
+        }
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                response = client.post(GOOGLE_TOKEN_URL, data=request_data)
+                response.raise_for_status()
+                token_data = response.json()
+        except (httpx.HTTPError, ValueError) as error:
+            raise OAuthExchangeError(failure_message) from error
+        if not isinstance(token_data, dict) or not isinstance(
+            token_data.get("access_token"), str
+        ):
+            raise OAuthExchangeError("Google returned an invalid token response")
+        return token_data
+
+    def _redirect_uri(self) -> str:
+        return f"{str(self.settings.backend_url).rstrip('/')}/api/v1/auth/google/callback"
 
 
 def create_oauth_authorization_url(
@@ -67,32 +138,5 @@ def consume_oauth_state(session: Session, raw_state: str) -> bool:
     return True
 
 
-class OAuthExchangeError(Exception):
-    """Raised when Google rejects an authorization-code exchange."""
-
-
 def exchange_authorization_code(settings: Settings, code: str) -> dict[str, object]:
-    if not settings.oauth_client_id or not settings.oauth_client_secret:
-        raise OAuthExchangeError("OAuth client credentials are not configured")
-
-    redirect_uri = f"{str(settings.backend_url).rstrip('/')}/api/v1/auth/google/callback"
-    try:
-        with httpx.Client(timeout=10.0) as client:
-            response = client.post(
-                "https://oauth2.googleapis.com/token",
-                data={
-                    "client_id": settings.oauth_client_id,
-                    "client_secret": settings.oauth_client_secret,
-                    "code": code,
-                    "grant_type": "authorization_code",
-                    "redirect_uri": redirect_uri,
-                },
-            )
-            response.raise_for_status()
-            token_data = response.json()
-    except (httpx.HTTPError, ValueError) as exchange_error:
-        raise OAuthExchangeError("Google authorization-code exchange failed") from exchange_error
-
-    if not isinstance(token_data, dict) or not isinstance(token_data.get("access_token"), str):
-        raise OAuthExchangeError("Google returned an invalid token response")
-    return token_data
+    return GoogleOAuthClient(settings).exchange_code(code)

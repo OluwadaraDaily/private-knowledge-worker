@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db.session import get_session
+from app.services.credentials import GoogleCredentialError, persist_google_credentials
 from app.services.oauth import (
     OAuthExchangeError,
     consume_oauth_state,
@@ -78,8 +79,10 @@ def complete_google_oauth(
     try:
         if not consume_oauth_state(session, state):
             raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
-        exchange_authorization_code(get_settings(), code)
-    except OAuthExchangeError as exchange_error:
+        settings = get_settings()
+        token_data = exchange_authorization_code(settings, code)
+        persist_google_credentials(session, settings, token_data)
+    except (GoogleCredentialError, OAuthExchangeError) as exchange_error:
         raise HTTPException(
             status_code=502, detail="Google authorization failed"
         ) from exchange_error
