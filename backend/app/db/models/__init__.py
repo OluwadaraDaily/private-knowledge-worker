@@ -6,6 +6,7 @@ from .document_index import DocumentIndex
 from .google_connection import GoogleConnection
 from .index_config import IndexConfig
 from .indexed_folder import IndexedFolder
+from .oauth_state import OAuthState
 from .sync_run import SyncRun
 from .sync_state import SyncState
 from .user import User
@@ -19,6 +20,7 @@ __all__ = [
     "GoogleConnection",
     "IndexConfig",
     "IndexedFolder",
+    "OAuthState",
     "SyncRun",
     "SyncState",
     "User",

@@ -19,6 +19,14 @@ class Settings(BaseSettings):
     test_database_url: str | None = None
     backend_url: AnyHttpUrl = AnyHttpUrl("http://127.0.0.1:8000")
     frontend_url: AnyHttpUrl = AnyHttpUrl("http://127.0.0.1:5173")
+    oauth_client_id: str | None = None
+    oauth_scopes: list[str] = [
+        "openid",
+        "email",
+        "profile",
+        "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/documents.readonly",
+    ]
     cors_origins: list[AnyHttpUrl] = [
         AnyHttpUrl("http://localhost:5173"),
         AnyHttpUrl("http://127.0.0.1:5173"),
