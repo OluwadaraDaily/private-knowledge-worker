@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from typing import cast
 from uuid import UUID, uuid4
 
@@ -13,9 +14,11 @@ from app.services.credentials import (
     GoogleCredentialError,
     decrypt_credential,
     encrypt_credential,
+    get_valid_google_access_token,
     persist_google_credentials,
     refresh_google_access_token,
 )
+from app.services.oauth import OAuthExchangeError
 
 
 class FakeSession:
@@ -37,6 +40,9 @@ class FakeSession:
 
     def commit(self) -> None:
         self.commits += 1
+
+    def rollback(self) -> None:
+        pass
 
 
 def test_credentials_round_trip_without_exposing_plaintext() -> None:
@@ -105,3 +111,73 @@ def test_refresh_requires_a_refresh_token() -> None:
 
     with pytest.raises(GoogleCredentialError, match="refresh token is unavailable"):
         refresh_google_access_token(cast(Session, FakeSession([])), settings, connection)
+
+
+def test_refresh_updates_access_token_and_preserves_refresh_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(token_encryption_key=Fernet.generate_key().decode())
+    session = FakeSession([])
+    connection = GoogleConnection(
+        user_id=UUID(int=0),
+        google_account_id="google-id",
+        email="user@example.com",
+        access_token_encrypted=encrypt_credential("old-access", settings),
+        refresh_token_encrypted=encrypt_credential("refresh-token", settings),
+        token_expires_at=datetime.now(UTC) - timedelta(seconds=1),
+        scopes=["openid"],
+    )
+    monkeypatch.setattr(
+        "app.services.credentials.GoogleOAuthClient.refresh_access_token",
+        lambda _client, refresh_token: {
+            "access_token": "new-access",
+            "expires_in": 3600,
+        },
+    )
+
+    assert (
+        get_valid_google_access_token(cast(Session, session), settings, connection) == "new-access"
+    )
+    assert decrypt_credential(connection.refresh_token_encrypted or "", settings) == "refresh-token"
+    assert session.commits == 1
+
+
+def test_valid_access_token_is_not_refreshed(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = Settings(token_encryption_key=Fernet.generate_key().decode())
+    connection = GoogleConnection(
+        user_id=UUID(int=0),
+        google_account_id="google-id",
+        email="user@example.com",
+        access_token_encrypted=encrypt_credential("access-token", settings),
+        refresh_token_encrypted=encrypt_credential("refresh-token", settings),
+        token_expires_at=datetime.now(UTC) + timedelta(minutes=10),
+        scopes=[],
+    )
+    monkeypatch.setattr(
+        "app.services.credentials.refresh_google_access_token",
+        lambda *_args: pytest.fail("refresh should not be called"),
+    )
+
+    assert get_valid_google_access_token(cast(Session, FakeSession([])), settings, connection) == (
+        "access-token"
+    )
+
+
+def test_refresh_failure_is_wrapped_without_committing(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = Settings(token_encryption_key=Fernet.generate_key().decode())
+    session = FakeSession([])
+    connection = GoogleConnection(
+        user_id=UUID(int=0),
+        google_account_id="google-id",
+        email="user@example.com",
+        refresh_token_encrypted=encrypt_credential("refresh-token", settings),
+        scopes=[],
+    )
+    monkeypatch.setattr(
+        "app.services.credentials.GoogleOAuthClient.refresh_access_token",
+        lambda *_args: (_ for _ in ()).throw(OAuthExchangeError("revoked")),
+    )
+
+    with pytest.raises(GoogleCredentialError, match="refresh failed"):
+        refresh_google_access_token(cast(Session, session), settings, connection)
+    assert session.commits == 0

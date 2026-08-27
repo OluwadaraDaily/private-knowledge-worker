@@ -19,6 +19,9 @@ class GoogleCredentialError(ValueError):
     """Raised when Google credentials cannot be stored or refreshed."""
 
 
+TOKEN_REFRESH_LEEWAY = timedelta(minutes=1)
+
+
 def _fernet(settings: Settings) -> Fernet:
     if not settings.token_encryption_key:
         raise CredentialEncryptionError("Token encryption key is not configured")
@@ -91,16 +94,23 @@ def _update_connection_tokens(
     access_token = token_data.get("access_token")
     if not isinstance(access_token, str):
         raise GoogleCredentialError("Google returned no access token")
-    connection.access_token_encrypted = encrypt_credential(access_token, settings)
     refresh_token = token_data.get("refresh_token")
-    if isinstance(refresh_token, str):
-        connection.refresh_token_encrypted = encrypt_credential(refresh_token, settings)
     expires_in = token_data.get("expires_in", 3600)
-    if not isinstance(expires_in, int):
+    if not isinstance(expires_in, int) or expires_in <= 0:
         raise GoogleCredentialError("Google returned an invalid token expiry")
-    connection.token_expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
     scope = token_data.get("scope")
-    connection.scopes = scope.split() if isinstance(scope, str) else list(settings.oauth_scopes)
+    scopes = scope.split() if isinstance(scope, str) else list(settings.oauth_scopes)
+
+    encrypted_access_token = encrypt_credential(access_token, settings)
+    encrypted_refresh_token = (
+        encrypt_credential(refresh_token, settings) if isinstance(refresh_token, str) else None
+    )
+
+    connection.access_token_encrypted = encrypted_access_token
+    if encrypted_refresh_token is not None:
+        connection.refresh_token_encrypted = encrypted_refresh_token
+    connection.token_expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
+    connection.scopes = scopes
 
 
 def persist_google_credentials(
@@ -123,14 +133,42 @@ def refresh_google_access_token(
 ) -> str:
     if not connection.refresh_token_encrypted:
         raise GoogleCredentialError("Google refresh token is unavailable")
-    refresh_token = decrypt_credential(connection.refresh_token_encrypted, settings)
+    try:
+        refresh_token = decrypt_credential(connection.refresh_token_encrypted, settings)
+    except CredentialEncryptionError as error:
+        session.rollback()
+        raise GoogleCredentialError("Stored Google refresh token cannot be decrypted") from error
     try:
         token_data = GoogleOAuthClient(settings).refresh_access_token(refresh_token)
     except OAuthExchangeError as error:
+        session.rollback()
         raise GoogleCredentialError("Google access-token refresh failed") from error
-    _update_connection_tokens(connection, settings, token_data)
-    session.commit()
+    try:
+        _update_connection_tokens(connection, settings, token_data)
+        session.commit()
+    except GoogleCredentialError:
+        session.rollback()
+        raise
     access_token = token_data.get("access_token")
     if not isinstance(access_token, str):
         raise GoogleCredentialError("Google returned no refreshed access token")
     return access_token
+
+
+def get_valid_google_access_token(
+    session: Session,
+    settings: Settings,
+    connection: GoogleConnection,
+    refresh_leeway: timedelta = TOKEN_REFRESH_LEEWAY,
+) -> str:
+    """Return a usable access token, refreshing it before it expires."""
+    if not connection.access_token_encrypted or connection.token_expires_at is None:
+        return refresh_google_access_token(session, settings, connection)
+
+    if connection.token_expires_at <= datetime.now(UTC) + refresh_leeway:
+        return refresh_google_access_token(session, settings, connection)
+
+    try:
+        return decrypt_credential(connection.access_token_encrypted, settings)
+    except CredentialEncryptionError as error:
+        raise GoogleCredentialError("Stored Google access token cannot be decrypted") from error
