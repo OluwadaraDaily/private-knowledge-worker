@@ -27,7 +27,7 @@ dev-backend:
 	$(PYTHON_BIN)/fastapi dev $(BACKEND_DIR)/app/main.py
 
 dev-frontend:
-	npm --prefix $(FRONTEND_DIR) run dev
+	npm --prefix $(FRONTEND_DIR) run dev -- --host 127.0.0.1
 
 lint: lint-backend lint-frontend
 
