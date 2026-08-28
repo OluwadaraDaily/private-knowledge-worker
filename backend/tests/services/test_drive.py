@@ -293,6 +293,22 @@ def test_drive_document_listing_returns_metadata_and_excludes_unowned_docs(
                         "ownedByMe": False,
                         "trashed": False,
                     },
+                    {
+                        "id": "shared-owned-doc",
+                        "name": "Shared with someone",
+                        "mimeType": "application/vnd.google-apps.document",
+                        "ownedByMe": True,
+                        "shared": True,
+                        "trashed": False,
+                    },
+                    {
+                        "id": "doc-1",
+                        "name": "Research notes duplicate",
+                        "mimeType": "application/vnd.google-apps.document",
+                        "parents": ["folder-1"],
+                        "ownedByMe": True,
+                        "trashed": False,
+                    },
                 ],
             },
         )

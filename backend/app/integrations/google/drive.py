@@ -18,7 +18,7 @@ GOOGLE_DOC_MIME_TYPE = "application/vnd.google-apps.document"
 GOOGLE_DRIVE_DOCUMENT_QUERY = f"mimeType = '{GOOGLE_DOC_MIME_TYPE}' and trashed = false"
 GOOGLE_DRIVE_DOCUMENT_FIELDS = (
     "nextPageToken,files(id,name,mimeType,parents,ownedByMe,trashed,"
-    "createdTime,modifiedTime,webViewLink)"
+    "shared,createdTime,modifiedTime,webViewLink)"
 )
 
 
@@ -156,6 +156,7 @@ def _parse_document_page(payload: object) -> GoogleDriveFilePage:
         raise GoogleApiError("Google Drive returned an invalid document response", kind="malformed")
 
     files: list[GoogleDriveFile] = []
+    seen_file_ids: set[str] = set()
     for raw_file in payload["files"]:
         if not isinstance(raw_file, dict):
             raise GoogleApiError(
@@ -171,7 +172,14 @@ def _parse_document_page(payload: object) -> GoogleDriveFilePage:
             raise GoogleApiError(
                 "Google Drive returned invalid document metadata", kind="malformed"
             )
-        if raw_file.get("ownedByMe") is not True or raw_file.get("trashed", False) is not False:
+        if file_id in seen_file_ids:
+            continue
+        seen_file_ids.add(file_id)
+        if (
+            raw_file.get("ownedByMe") is not True
+            or raw_file.get("shared", False) is True
+            or raw_file.get("trashed", False) is not False
+        ):
             continue
         raw_parents = raw_file.get("parents", [])
         if not isinstance(raw_parents, list) or not all(

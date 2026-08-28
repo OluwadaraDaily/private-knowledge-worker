@@ -125,6 +125,7 @@ def list_all_google_drive_documents(
     """Fetch every page of owned Google Docs metadata."""
     client = drive_client if drive_client is not None else GoogleDriveClient()
     files: list[GoogleDriveFile] = []
+    seen_file_ids: set[str] = set()
     page_token: str | None = None
     seen_page_tokens: set[str] = set()
     while True:
@@ -134,7 +135,10 @@ def list_all_google_drive_documents(
             connection,
             partial(client.list_documents, page_token=page_token, page_size=page_size),
         )
-        files.extend(page.files)
+        for file in page.files:
+            if file.id not in seen_file_ids:
+                seen_file_ids.add(file.id)
+                files.append(file)
         if page.next_page_token is None:
             return tuple(files)
         if page.next_page_token in seen_page_tokens:
