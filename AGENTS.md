@@ -61,3 +61,8 @@
 - Update both trackers after the definition of done is met and human validation is confirmed.
 - Check a feature's **Feature complete** checkbox in `FEATURES.md` as soon as all of its required sub-features are complete and validated; apply this consistently to every subsequent feature.
 - If either file is absent, ignore it without error and continue from the repository and the user's current instructions.
+
+## 12. Frontend development skill
+
+- Use the Codex `frontend-design` skill for all frontend UI development and redesign work in this project.
+- Read and apply its visual-direction, typography, layout, responsive, accessibility, and interaction guidance before implementing frontend changes.
