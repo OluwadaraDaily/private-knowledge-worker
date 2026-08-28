@@ -4,6 +4,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models.indexed_folder import IndexedFolder
+from app.integrations.google.interfaces import GoogleDriveFolder
+
+
+class FolderSelectionValidationError(ValueError):
+    """Raised when a requested folder set is not a valid owned-folder selection."""
 
 
 def list_selected_folders(session: Session, user_id: UUID) -> list[IndexedFolder]:
@@ -48,3 +53,35 @@ def replace_selected_folders(
 
     session.commit()
     return list_selected_folders(session, user_id)
+
+
+def validate_selected_folders(
+    available_folders: tuple[GoogleDriveFolder, ...],
+    selected_ids: list[str],
+) -> list[tuple[str, str]]:
+    """Validate ownership and ancestor conflicts, returning canonical folder names."""
+    folders_by_id = {folder.id: folder for folder in available_folders}
+    if len(selected_ids) != len(set(selected_ids)):
+        raise FolderSelectionValidationError("Selected folders must be unique")
+
+    unknown_ids = [folder_id for folder_id in selected_ids if folder_id not in folders_by_id]
+    if unknown_ids:
+        raise FolderSelectionValidationError(
+            "Selected folders must belong to the connected Google Drive account"
+        )
+
+    selected_id_set = set(selected_ids)
+    for folder_id in selected_ids:
+        ancestors = set(folders_by_id[folder_id].parents)
+        pending_ancestors = list(ancestors)
+        while pending_ancestors:
+            ancestor_id = pending_ancestors.pop()
+            if ancestor_id in selected_id_set:
+                raise FolderSelectionValidationError(
+                    "Select either a folder or one of its descendants, not both"
+                )
+            ancestor = folders_by_id.get(ancestor_id)
+            if ancestor is not None:
+                pending_ancestors.extend(ancestor.parents)
+
+    return [(folder_id, folders_by_id[folder_id].name) for folder_id in selected_ids]

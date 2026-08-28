@@ -10,8 +10,13 @@ from app.db.models.google_connection import GoogleConnection
 from app.db.models.indexed_folder import IndexedFolder
 from app.db.session import get_session
 from app.services.folder_hierarchy import GoogleFolderNode, list_google_folder_hierarchy
-from app.services.folder_selection import list_selected_folders, replace_selected_folders
-from app.services.google_connections import list_google_drive_folders
+from app.services.folder_selection import (
+    FolderSelectionValidationError,
+    list_selected_folders,
+    replace_selected_folders,
+    validate_selected_folders,
+)
+from app.services.google_connections import list_all_google_drive_folders, list_google_drive_folders
 
 
 class GoogleFolderResponse(BaseModel):
@@ -141,7 +146,23 @@ def put_selected_google_drive_folders(
     connection: Annotated[GoogleConnection, Depends(require_google_connection)],
 ) -> list[SelectedFolderResponse]:
     folder_pairs = [(folder.id, folder.name) for folder in selection.folders]
-    if len(folder_pairs) != len(set(folder_id for folder_id, _name in folder_pairs)):
+    if len(folder_pairs) != len({folder_id for folder_id, _name in folder_pairs}):
         raise HTTPException(status_code=422, detail="Selected folders must be unique")
-    selected_folders = replace_selected_folders(session, connection.user_id, folder_pairs)
+    try:
+        available_folders = list_all_google_drive_folders(
+            session,
+            get_settings(),
+            connection,
+        )
+        validated_folders = validate_selected_folders(
+            available_folders,
+            [folder_id for folder_id, _name in folder_pairs],
+        )
+    except FolderSelectionValidationError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    selected_folders = replace_selected_folders(
+        session,
+        connection.user_id,
+        validated_folders,
+    )
     return [_selected_folder_response(folder) for folder in selected_folders]

@@ -4,7 +4,13 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from app.db.models.indexed_folder import IndexedFolder
-from app.services.folder_selection import list_selected_folders, replace_selected_folders
+from app.integrations.google.interfaces import GoogleDriveFolder
+from app.services.folder_selection import (
+    FolderSelectionValidationError,
+    list_selected_folders,
+    replace_selected_folders,
+    validate_selected_folders,
+)
 
 
 class ScalarResult:
@@ -64,3 +70,36 @@ def test_list_selected_folders_uses_the_session_query() -> None:
     session = SelectionSession([folder])
 
     assert list_selected_folders(cast(Session, session), user_id) == [folder]
+
+
+def test_validate_selected_folders_uses_owned_names_and_rejects_unknown_ids() -> None:
+    available = (
+        GoogleDriveFolder(id="parent", name="Parent", parents=()),
+        GoogleDriveFolder(id="child", name="Child", parents=("parent",)),
+    )
+
+    assert validate_selected_folders(available, ["child"]) == [("child", "Child")]
+    try:
+        validate_selected_folders(available, ["not-owned"])
+    except FolderSelectionValidationError as error:
+        assert str(error) == "Selected folders must belong to the connected Google Drive account"
+    else:
+        raise AssertionError("Expected unknown folder validation to fail")
+
+
+def test_validate_selected_folders_rejects_duplicate_and_ancestor_selections() -> None:
+    available = (
+        GoogleDriveFolder(id="parent", name="Parent", parents=()),
+        GoogleDriveFolder(id="child", name="Child", parents=("parent",)),
+    )
+
+    for selected_ids, message in [
+        (["parent", "parent"], "Selected folders must be unique"),
+        (["parent", "child"], "Select either a folder or one of its descendants, not both"),
+    ]:
+        try:
+            validate_selected_folders(available, selected_ids)
+        except FolderSelectionValidationError as error:
+            assert str(error) == message
+        else:
+            raise AssertionError("Expected invalid folder selection to fail")

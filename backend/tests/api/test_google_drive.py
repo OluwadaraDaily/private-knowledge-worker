@@ -170,7 +170,9 @@ def test_get_google_drive_folder_tree_returns_nested_nodes(
     assert calls == [25]
 
 
-def test_selected_folders_can_be_loaded_and_replaced() -> None:
+def test_selected_folders_can_be_loaded_and_replaced(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     app = create_app()
     connection = GoogleConnection(
         id=uuid4(),
@@ -184,6 +186,14 @@ def test_selected_folders_can_be_loaded_and_replaced() -> None:
         [IndexedFolder(user_id=connection.user_id, google_folder_id="old", name="Old")],
     )
     app.dependency_overrides[get_session] = lambda: session
+    monkeypatch.setattr(
+        google_drive_module,
+        "list_all_google_drive_folders",
+        lambda *_args, **_kwargs: (
+            GoogleDriveFolder(id="old", name="Old", parents=()),
+            GoogleDriveFolder(id="new", name="New", parents=()),
+        ),
+    )
 
     try:
         with TestClient(app) as test_client:
@@ -201,6 +211,43 @@ def test_selected_folders_can_be_loaded_and_replaced() -> None:
     assert replaced.status_code == 200
     assert replaced.json() == [{"id": "new", "name": "New"}]
     assert session.commits == 1
+
+
+def test_selected_folders_reject_unowned_folder_ids() -> None:
+    app = create_app()
+    connection = GoogleConnection(
+        id=uuid4(),
+        user_id=uuid4(),
+        google_account_id="google-id",
+        email="user@example.com",
+        scopes=["drive.readonly"],
+    )
+    session = SelectedFolderSession(connection, [])
+    app.dependency_overrides[get_session] = lambda: session
+
+    try:
+        with pytest.MonkeyPatch.context() as monkeypatch:
+            monkeypatch.setattr(
+                google_drive_module,
+                "list_all_google_drive_folders",
+                lambda *_args, **_kwargs: (
+                    GoogleDriveFolder(id="owned", name="Owned", parents=()),
+                ),
+            )
+            with TestClient(app) as test_client:
+                test_client.cookies.set("google_connection_id", str(connection.id))
+                response = test_client.put(
+                    "/api/v1/drive/folders/selected",
+                    json={"folders": [{"id": "shared", "name": "Shared"}]},
+                )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "Selected folders must belong to the connected Google Drive account"
+    }
+    assert session.commits == 0
 
 
 def test_selected_folders_reject_duplicate_ids() -> None:
