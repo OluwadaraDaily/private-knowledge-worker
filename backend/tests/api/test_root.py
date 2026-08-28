@@ -263,7 +263,7 @@ def test_google_disconnect_clears_cookie_and_commits() -> None:
     assert session.commits == 1
 
 
-def test_google_callback_redirects_to_frontend_after_authorization(
+def test_google_callback_redirects_to_google_setup_route_after_authorization(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     app = create_app()
@@ -302,5 +302,5 @@ def test_google_callback_redirects_to_frontend_after_authorization(
         app.dependency_overrides.clear()
 
     assert response.status_code == 303
-    assert response.headers["location"] == "http://localhost:5173"
+    assert response.headers["location"] == "http://localhost:5173/connect"
     assert "google_connection_id=" in response.headers["set-cookie"]

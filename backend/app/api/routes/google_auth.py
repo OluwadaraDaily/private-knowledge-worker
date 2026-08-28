@@ -94,7 +94,7 @@ def complete_google_oauth(
             status_code=502, detail="Google authorization failed"
         ) from exchange_error
     response = RedirectResponse(
-        url=str(settings.frontend_url).rstrip("/"),
+        url=f"{str(settings.frontend_url).rstrip('/')}/connect",
         status_code=303,
     )
     response.set_cookie(
