@@ -1,20 +1,51 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
 
 describe('App', () => {
+  beforeEach(() => {
+    window.history.replaceState({}, '', '/')
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('starts on the overview and opens the connection setup', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
+    render(<App />)
+
+    expect(
+      screen.getByRole('heading', {
+        name: 'Ask better questions of the knowledge you already have.',
+      }),
+    ).toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Start with your knowledge' }),
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: 'Bring your own context.' }),
+    ).toBeInTheDocument()
+  })
+
   it('reports when the backend is available', async () => {
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue({ ok: true, json: async () => ({ status: 'ok' }) }),
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ status: 'ok' }),
+      }),
     )
     render(<App />)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Start with your knowledge' }),
+    )
 
     await waitFor(() =>
-      expect(screen.getByText('Backend is available.')).toBeInTheDocument(),
+      expect(screen.getByText('Your workspace is ready.')).toBeInTheDocument(),
     )
   })
 
@@ -29,13 +60,16 @@ describe('App', () => {
       .mockResolvedValueOnce({ ok: true })
     vi.stubGlobal('fetch', fetchMock)
     render(<App />)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Start with your knowledge' }),
+    )
 
     expect(await screen.findByText('user@example.com')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Disconnect Google' }))
 
     await waitFor(() =>
       expect(
-        screen.getByRole('link', { name: 'Connect Google' }),
+        screen.getByRole('link', { name: 'Continue with Google' }),
       ).toBeInTheDocument(),
     )
     expect(fetchMock).toHaveBeenLastCalledWith(
@@ -55,6 +89,9 @@ describe('App', () => {
       .mockResolvedValueOnce({ ok: false })
     vi.stubGlobal('fetch', fetchMock)
     render(<App />)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Start with your knowledge' }),
+    )
 
     await screen.findByText('user@example.com')
     fireEvent.click(screen.getByRole('button', { name: 'Disconnect Google' }))
@@ -68,9 +105,14 @@ describe('App', () => {
   it('reports when the backend is unavailable', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
     render(<App />)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Start with your knowledge' }),
+    )
 
     await waitFor(() =>
-      expect(screen.getByText(/Backend is unavailable/)).toBeInTheDocument(),
+      expect(
+        screen.getByText(/workspace service is unavailable/),
+      ).toBeInTheDocument(),
     )
   })
 })
