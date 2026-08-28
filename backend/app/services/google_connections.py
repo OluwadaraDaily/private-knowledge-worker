@@ -8,8 +8,11 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.db.models.google_connection import GoogleConnection
 from app.integrations.google.client import GoogleApiError
+from app.integrations.google.docs import GoogleDocsClient
 from app.integrations.google.drive import GoogleDriveClient
 from app.integrations.google.interfaces import (
+    GoogleDocsDocument,
+    GoogleDocsDocumentFetcher,
     GoogleDriveFile,
     GoogleDriveFileLister,
     GoogleDriveFilePage,
@@ -60,6 +63,23 @@ def verify_google_drive_connection(
         settings,
         connection,
         client.verify_access,
+    )
+
+
+def fetch_google_document(
+    session: Session,
+    settings: Settings,
+    connection: GoogleConnection,
+    document_id: str,
+    docs_client: GoogleDocsDocumentFetcher | None = None,
+) -> GoogleDocsDocument:
+    """Fetch one Google Doc through the shared credential refresh boundary."""
+    client = docs_client if docs_client is not None else GoogleDocsClient()
+    return _run_with_google_access_token(
+        session,
+        settings,
+        connection,
+        lambda access_token: client.get_document(access_token, document_id),
     )
 
 

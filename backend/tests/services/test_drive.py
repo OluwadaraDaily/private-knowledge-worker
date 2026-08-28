@@ -5,6 +5,7 @@ import httpx
 import pytest
 
 from app.integrations.google.client import GoogleApiError
+from app.integrations.google.docs import GOOGLE_DOCS_DOCUMENTS_URL, GoogleDocsClient
 from app.integrations.google.drive import (
     GOOGLE_DRIVE_ABOUT_URL,
     GOOGLE_DRIVE_DOCUMENT_FIELDS,
@@ -346,3 +347,26 @@ def test_drive_document_listing_returns_metadata_and_excludes_unowned_docs(
         ),
         next_page_token="next-page",
     )
+
+
+def test_google_docs_client_returns_raw_structural_content(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_client = FakeClient(
+        FakeResponse(
+            200,
+            {
+                "documentId": "doc-1",
+                "title": "Research notes",
+                "body": {"content": [{"startIndex": 1, "paragraph": {}}]},
+            },
+        )
+    )
+    monkeypatch.setattr(httpx, "Client", lambda timeout: fake_client)
+
+    document = GoogleDocsClient().get_document("access-token", "doc-1")
+
+    assert fake_client.url == f"{GOOGLE_DOCS_DOCUMENTS_URL}/doc-1"
+    assert document.document_id == "doc-1"
+    assert document.title == "Research notes"
+    assert document.body_content == ({"startIndex": 1, "paragraph": {}},)

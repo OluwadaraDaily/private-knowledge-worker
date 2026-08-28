@@ -82,3 +82,19 @@ class GoogleDriveGateway(
     Protocol,
 ):
     """Combined Google Drive client contract."""
+
+
+@dataclass(frozen=True, slots=True)
+class GoogleDocsDocument:
+    """Validated raw Google Docs API structure for later normalization."""
+
+    document_id: str
+    title: str
+    body_content: tuple[dict[str, object], ...]
+
+
+class GoogleDocsDocumentFetcher(Protocol):
+    """Application-facing Google Docs content contract."""
+
+    def get_document(self, access_token: str, document_id: str) -> GoogleDocsDocument:
+        """Fetch one Google Doc's structural content."""
