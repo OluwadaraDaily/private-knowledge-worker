@@ -9,7 +9,7 @@ from app.api.errors.google import google_drive_http_exception
 from app.core.config import get_settings
 from app.db.models.google_connection import GoogleConnection
 from app.db.session import get_session
-from app.integrations.google.drive import GoogleDriveError
+from app.integrations.google.client import GoogleApiError
 from app.services.credentials import GoogleCredentialError
 from app.services.folder_hierarchy import GoogleFolderNode, list_google_folder_hierarchy
 from app.services.google_connections import list_google_drive_folders
@@ -54,7 +54,7 @@ def get_google_drive_folders(
             page_token=page_token,
             page_size=page_size,
         )
-    except (GoogleCredentialError, GoogleDriveError) as error:
+    except (GoogleCredentialError, GoogleApiError) as error:
         raise google_drive_http_exception(error, operation="folder listing") from error
 
     return GoogleFolderPageResponse(
@@ -95,7 +95,7 @@ def get_google_drive_folder_tree(
             connection,
             page_size=page_size,
         )
-    except (GoogleCredentialError, GoogleDriveError) as error:
+    except (GoogleCredentialError, GoogleApiError) as error:
         raise google_drive_http_exception(error, operation="folder hierarchy") from error
 
     return [_folder_node_response(node) for node in folder_tree]

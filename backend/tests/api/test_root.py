@@ -12,7 +12,7 @@ from app.api.routes import google_auth as google_auth_module
 from app.core.config import Settings
 from app.db.models.google_connection import GoogleConnection
 from app.db.session import get_session
-from app.integrations.google.drive import GoogleDriveAuthenticationError, GoogleDriveError
+from app.integrations.google.client import GoogleApiError
 from app.main import create_app
 
 
@@ -193,7 +193,7 @@ def test_google_drive_verify_reports_invalid_google_authentication(
         google_auth_module,
         "verify_google_drive_connection",
         lambda *_args: (_ for _ in ()).throw(
-            GoogleDriveAuthenticationError("provider rejected token")
+            GoogleApiError("provider rejected token", kind="authentication", status_code=401)
         ),
     )
 
@@ -225,7 +225,7 @@ def test_google_drive_verify_hides_upstream_failure_details(
     monkeypatch.setattr(
         google_auth_module,
         "verify_google_drive_connection",
-        lambda *_args: (_ for _ in ()).throw(GoogleDriveError("provider body contains a secret")),
+        lambda *_args: (_ for _ in ()).throw(GoogleApiError("provider body contains a secret")),
     )
 
     try:

@@ -8,7 +8,7 @@ from app.api.routes import google_drive as google_drive_module
 from app.core.config import Settings
 from app.db.models.google_connection import GoogleConnection
 from app.db.session import get_session
-from app.integrations.google.drive import GoogleDriveAuthenticationError, GoogleDriveError
+from app.integrations.google.client import GoogleApiError
 from app.integrations.google.interfaces import GoogleDriveFolder, GoogleDriveFolderPage
 from app.main import create_app
 from app.services.folder_hierarchy import GoogleFolderNode
@@ -145,12 +145,12 @@ def test_get_google_drive_folder_tree_returns_nested_nodes(
     ("error", "status_code", "detail"),
     [
         (
-            GoogleDriveAuthenticationError("provider rejected token"),
+            GoogleApiError("provider rejected token", kind="authentication", status_code=401),
             401,
             "Google authentication is no longer valid; reconnect Google",
         ),
         (
-            GoogleDriveError("provider response contains a secret"),
+            GoogleApiError("provider response contains a secret"),
             502,
             "Google Drive folder listing failed",
         ),
@@ -158,7 +158,7 @@ def test_get_google_drive_folder_tree_returns_nested_nodes(
 )
 def test_list_google_drive_folders_hides_provider_errors(
     monkeypatch: pytest.MonkeyPatch,
-    error: GoogleDriveError,
+    error: GoogleApiError,
     status_code: int,
     detail: str,
 ) -> None:
@@ -187,3 +187,40 @@ def test_list_google_drive_folders_hides_provider_errors(
     assert response.status_code == status_code
     assert response.json() == {"detail": detail}
     assert "provider response contains a secret" not in response.text
+
+
+def test_list_google_drive_folders_reports_rate_limits_with_retry_after(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = create_app()
+    connection = GoogleConnection(
+        id=uuid4(),
+        user_id=uuid4(),
+        google_account_id="google-id",
+        email="user@example.com",
+        scopes=["drive.readonly"],
+    )
+    app.dependency_overrides[get_session] = lambda: ConnectionSession(connection)
+    monkeypatch.setattr(
+        google_drive_module,
+        "list_google_drive_folders",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            GoogleApiError(
+                "Google API rate limit exceeded",
+                kind="rate_limit",
+                status_code=429,
+                retry_after_seconds=3,
+            )
+        ),
+    )
+
+    try:
+        with TestClient(app) as test_client:
+            test_client.cookies.set("google_connection_id", str(connection.id))
+            response = test_client.get("/api/v1/drive/folders")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "3"
+    assert response.json() == {"detail": "Google Drive rate limit exceeded; please try again later"}

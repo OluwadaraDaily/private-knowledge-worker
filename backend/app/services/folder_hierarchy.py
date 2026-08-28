@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.db.models.google_connection import GoogleConnection
-from app.integrations.google.drive import GoogleDriveError
+from app.integrations.google.client import GoogleApiError
 from app.integrations.google.interfaces import (
     GoogleDriveFolder,
     GoogleDriveFolderLister,
@@ -29,7 +29,10 @@ def build_google_folder_hierarchy(
     folders_by_id: dict[str, GoogleDriveFolder] = {}
     for folder in folders:
         if folder.id in folders_by_id:
-            raise GoogleDriveError("Google Drive returned duplicate folder metadata")
+            raise GoogleApiError(
+                "Google Drive returned duplicate folder metadata",
+                kind="malformed",
+            )
         folders_by_id[folder.id] = folder
 
     children_by_parent: dict[str, list[str]] = {}
@@ -48,7 +51,10 @@ def build_google_folder_hierarchy(
 
     def build_node(folder_id: str, ancestors: frozenset[str]) -> GoogleFolderNode:
         if folder_id in ancestors:
-            raise GoogleDriveError("Google Drive returned a cyclic folder hierarchy")
+            raise GoogleApiError(
+                "Google Drive returned a cyclic folder hierarchy",
+                kind="malformed",
+            )
         folder = folders_by_id[folder_id]
         visited.add(folder_id)
         child_nodes = tuple(
@@ -62,7 +68,10 @@ def build_google_folder_hierarchy(
 
     tree = tuple(build_node(folder_id, frozenset()) for folder_id in root_ids)
     if len(visited) != len(folders_by_id):
-        raise GoogleDriveError("Google Drive returned a cyclic folder hierarchy")
+        raise GoogleApiError(
+            "Google Drive returned a cyclic folder hierarchy",
+            kind="malformed",
+        )
     return tree
 
 

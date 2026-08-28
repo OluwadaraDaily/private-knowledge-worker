@@ -14,10 +14,7 @@ from app.api.errors.google import google_drive_http_exception
 from app.core.config import get_settings
 from app.db.models.google_connection import GoogleConnection
 from app.db.session import get_session
-from app.integrations.google.drive import (
-    GoogleDriveAuthenticationError,
-    GoogleDriveError,
-)
+from app.integrations.google.client import GoogleApiError
 from app.services.credentials import (
     GoogleCredentialError,
     persist_google_credentials,
@@ -145,7 +142,7 @@ def verify_google_drive(
     settings = get_settings()
     try:
         verify_google_drive_connection(session, settings, connection)
-    except (GoogleDriveAuthenticationError, GoogleCredentialError, GoogleDriveError) as error:
+    except (GoogleApiError, GoogleCredentialError) as error:
         raise google_drive_http_exception(error) from error
 
     return GoogleDriveVerification(authenticated=True, email=connection.email)

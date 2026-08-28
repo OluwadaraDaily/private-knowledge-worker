@@ -131,6 +131,7 @@ def persist_google_credentials(
 def refresh_google_access_token(
     session: Session, settings: Settings, connection: GoogleConnection
 ) -> str:
+    """Force-refresh a Google access token using the stored refresh token."""
     if not connection.refresh_token_encrypted:
         raise GoogleCredentialError("Google refresh token is unavailable")
     try:
@@ -146,9 +147,11 @@ def refresh_google_access_token(
     try:
         _update_connection_tokens(connection, settings, token_data)
         session.commit()
-    except GoogleCredentialError:
+    except (CredentialEncryptionError, GoogleCredentialError) as error:
         session.rollback()
-        raise
+        if isinstance(error, GoogleCredentialError):
+            raise GoogleCredentialError(str(error)) from error
+        raise GoogleCredentialError("Refreshed Google credentials could not be stored") from error
     access_token = token_data.get("access_token")
     if not isinstance(access_token, str):
         raise GoogleCredentialError("Google returned no refreshed access token")

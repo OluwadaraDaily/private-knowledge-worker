@@ -1,6 +1,6 @@
 import pytest
 
-from app.integrations.google.drive import GoogleDriveError
+from app.integrations.google.client import GoogleApiError
 from app.integrations.google.interfaces import GoogleDriveFolder
 from app.services.folder_hierarchy import GoogleFolderNode, build_google_folder_hierarchy
 
@@ -30,5 +30,5 @@ def test_build_google_folder_hierarchy_rejects_cycles() -> None:
         GoogleDriveFolder(id="second", name="Second", parents=("first",)),
     )
 
-    with pytest.raises(GoogleDriveError, match="cyclic"):
+    with pytest.raises(GoogleApiError, match="cyclic"):
         build_google_folder_hierarchy(folders)

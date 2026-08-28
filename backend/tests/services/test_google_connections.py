@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.db.models.google_connection import GoogleConnection
-from app.integrations.google.drive import GoogleDriveError
+from app.integrations.google.client import GoogleApiError
 from app.integrations.google.interfaces import (
     GoogleDriveFolder,
     GoogleDriveFolderLister,
@@ -38,9 +38,12 @@ class FakeDriveClient:
             next_page_token="next-page",
         )
         self.folder_pages: dict[str | None, GoogleDriveFolderPage] = {None: self.folder_page}
+        self.verify_errors: list[BaseException] = []
 
     def verify_access(self, access_token: str) -> None:
         self.access_tokens.append(access_token)
+        if self.verify_errors:
+            raise self.verify_errors.pop(0)
 
     def list_folders(
         self,
@@ -89,6 +92,118 @@ def test_verify_google_drive_connection_uses_injected_drive_gateway(
     )
 
     assert fake_drive_client.access_tokens == ["access-token"]
+
+
+def test_google_drive_request_refreshes_after_token_rejection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings()
+    connection = GoogleConnection(
+        user_id=UUID(int=0),
+        google_account_id="google-id",
+        email="user@example.com",
+        scopes=["drive.readonly"],
+    )
+    fake_drive_client = FakeDriveClient()
+    fake_drive_client.verify_errors = [
+        GoogleApiError("expired token", kind="authentication", status_code=401)
+    ]
+    monkeypatch.setattr(
+        google_connections_module,
+        "get_valid_google_access_token",
+        lambda *_args: "expired-token",
+    )
+    monkeypatch.setattr(
+        google_connections_module,
+        "refresh_google_access_token",
+        lambda *_args: "fresh-token",
+    )
+
+    google_connections_module.verify_google_drive_connection(
+        cast(Session, FakeSession()),
+        settings,
+        connection,
+        fake_drive_client,
+    )
+
+    assert fake_drive_client.access_tokens == ["expired-token", "fresh-token"]
+
+
+def test_google_drive_request_surfaces_refresh_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings()
+    connection = GoogleConnection(
+        user_id=UUID(int=0),
+        google_account_id="google-id",
+        email="user@example.com",
+        scopes=["drive.readonly"],
+    )
+    fake_drive_client = FakeDriveClient()
+    fake_drive_client.verify_errors = [
+        GoogleApiError("revoked token", kind="authentication", status_code=401)
+    ]
+    monkeypatch.setattr(
+        google_connections_module,
+        "get_valid_google_access_token",
+        lambda *_args: "expired-token",
+    )
+    monkeypatch.setattr(
+        google_connections_module,
+        "refresh_google_access_token",
+        lambda *_args: (_ for _ in ()).throw(
+            GoogleCredentialError("Google access-token refresh failed")
+        ),
+    )
+
+    with pytest.raises(GoogleCredentialError, match="refresh failed"):
+        google_connections_module.verify_google_drive_connection(
+            cast(Session, FakeSession()),
+            settings,
+            connection,
+            fake_drive_client,
+        )
+
+
+def test_google_drive_request_refreshes_at_most_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings()
+    connection = GoogleConnection(
+        user_id=UUID(int=0),
+        google_account_id="google-id",
+        email="user@example.com",
+        scopes=["drive.readonly"],
+    )
+    fake_drive_client = FakeDriveClient()
+    fake_drive_client.verify_errors = [
+        GoogleApiError("expired token", kind="authentication", status_code=401),
+        GoogleApiError("refreshed token rejected", kind="authentication", status_code=401),
+    ]
+    refresh_calls = 0
+    monkeypatch.setattr(
+        google_connections_module,
+        "get_valid_google_access_token",
+        lambda *_args: "expired-token",
+    )
+
+    def fake_refresh(*_args: object) -> str:
+        nonlocal refresh_calls
+        refresh_calls += 1
+        return "fresh-token"
+
+    monkeypatch.setattr(google_connections_module, "refresh_google_access_token", fake_refresh)
+
+    with pytest.raises(GoogleApiError, match="rejected"):
+        google_connections_module.verify_google_drive_connection(
+            cast(Session, FakeSession()),
+            settings,
+            connection,
+            fake_drive_client,
+        )
+
+    assert refresh_calls == 1
+    assert fake_drive_client.access_tokens == ["expired-token", "fresh-token"]
 
 
 def test_list_google_drive_folders_uses_injected_drive_gateway(
@@ -185,7 +300,7 @@ def test_list_all_google_drive_folders_rejects_repeated_page_tokens(
         lambda *_args: "access-token",
     )
 
-    with pytest.raises(GoogleDriveError, match="non-advancing"):
+    with pytest.raises(GoogleApiError, match="non-advancing"):
         google_connections_module.list_all_google_drive_folders(
             cast(Session, FakeSession()),
             settings,
