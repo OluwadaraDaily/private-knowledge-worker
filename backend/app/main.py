@@ -1,8 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.errors.google import google_api_error_handler, google_credential_error_handler
 from app.api.router import api_router
 from app.core.config import get_settings
+from app.integrations.google.client import GoogleApiError
+from app.services.credentials import GoogleCredentialError
 
 
 def create_app() -> FastAPI:
@@ -18,6 +21,8 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
     )
+    application.add_exception_handler(GoogleApiError, google_api_error_handler)
+    application.add_exception_handler(GoogleCredentialError, google_credential_error_handler)
     application.include_router(api_router, prefix="/api/v1")
     return application
 

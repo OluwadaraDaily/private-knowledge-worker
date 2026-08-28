@@ -152,7 +152,7 @@ def test_get_google_drive_folder_tree_returns_nested_nodes(
         (
             GoogleApiError("provider response contains a secret"),
             502,
-            "Google Drive folder listing failed",
+            "Google API request failed",
         ),
     ],
 )
@@ -223,4 +223,4 @@ def test_list_google_drive_folders_reports_rate_limits_with_retry_after(
 
     assert response.status_code == 429
     assert response.headers["Retry-After"] == "3"
-    assert response.json() == {"detail": "Google Drive rate limit exceeded; please try again later"}
+    assert response.json() == {"detail": "Google API rate limit exceeded; please try again later"}

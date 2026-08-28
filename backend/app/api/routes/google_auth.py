@@ -10,15 +10,10 @@ from app.api.dependencies.google import (
     get_optional_google_connection,
     require_google_connection,
 )
-from app.api.errors.google import google_drive_http_exception
 from app.core.config import get_settings
 from app.db.models.google_connection import GoogleConnection
 from app.db.session import get_session
-from app.integrations.google.client import GoogleApiError
-from app.services.credentials import (
-    GoogleCredentialError,
-    persist_google_credentials,
-)
+from app.services.credentials import GoogleCredentialError, persist_google_credentials
 from app.services.google_connections import (
     disconnect_google_connection,
     verify_google_drive_connection,
@@ -140,10 +135,7 @@ def verify_google_drive(
     connection: Annotated[GoogleConnection, Depends(require_google_connection)],
 ) -> GoogleDriveVerification:
     settings = get_settings()
-    try:
-        verify_google_drive_connection(session, settings, connection)
-    except (GoogleApiError, GoogleCredentialError) as error:
-        raise google_drive_http_exception(error) from error
+    verify_google_drive_connection(session, settings, connection)
 
     return GoogleDriveVerification(authenticated=True, email=connection.email)
 

@@ -5,12 +5,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.google import require_google_connection
-from app.api.errors.google import google_drive_http_exception
 from app.core.config import get_settings
 from app.db.models.google_connection import GoogleConnection
 from app.db.session import get_session
-from app.integrations.google.client import GoogleApiError
-from app.services.credentials import GoogleCredentialError
 from app.services.folder_hierarchy import GoogleFolderNode, list_google_folder_hierarchy
 from app.services.google_connections import list_google_drive_folders
 
@@ -46,16 +43,13 @@ def get_google_drive_folders(
     page_token: str | None = Query(default=None),
     page_size: int = Query(default=100, ge=1, le=1000),
 ) -> GoogleFolderPageResponse:
-    try:
-        folder_page = list_google_drive_folders(
-            session,
-            get_settings(),
-            connection,
-            page_token=page_token,
-            page_size=page_size,
-        )
-    except (GoogleCredentialError, GoogleApiError) as error:
-        raise google_drive_http_exception(error, operation="folder listing") from error
+    folder_page = list_google_drive_folders(
+        session,
+        get_settings(),
+        connection,
+        page_token=page_token,
+        page_size=page_size,
+    )
 
     return GoogleFolderPageResponse(
         folders=[
@@ -88,14 +82,11 @@ def get_google_drive_folder_tree(
     connection: Annotated[GoogleConnection, Depends(require_google_connection)],
     page_size: int = Query(default=100, ge=1, le=1000),
 ) -> list[GoogleFolderTreeResponse]:
-    try:
-        folder_tree = list_google_folder_hierarchy(
-            session,
-            get_settings(),
-            connection,
-            page_size=page_size,
-        )
-    except (GoogleCredentialError, GoogleApiError) as error:
-        raise google_drive_http_exception(error, operation="folder hierarchy") from error
+    folder_tree = list_google_folder_hierarchy(
+        session,
+        get_settings(),
+        connection,
+        page_size=page_size,
+    )
 
     return [_folder_node_response(node) for node in folder_tree]

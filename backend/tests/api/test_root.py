@@ -236,7 +236,7 @@ def test_google_drive_verify_hides_upstream_failure_details(
         app.dependency_overrides.clear()
 
     assert response.status_code == 502
-    assert response.json() == {"detail": "Google Drive verification failed"}
+    assert response.json() == {"detail": "Google API request failed"}
     assert "provider body contains a secret" not in response.text
 
 
