@@ -11,6 +11,7 @@ from app.db.session import get_session
 from app.integrations.google.drive import GoogleDriveAuthenticationError, GoogleDriveError
 from app.integrations.google.interfaces import GoogleDriveFolder, GoogleDriveFolderPage
 from app.main import create_app
+from app.services.folder_hierarchy import GoogleFolderNode
 
 
 class ConnectionSession:
@@ -82,6 +83,62 @@ def test_list_google_drive_folders_requires_a_connection() -> None:
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Google account is not connected"}
+
+
+def test_get_google_drive_folder_tree_returns_nested_nodes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = create_app()
+    connection = GoogleConnection(
+        id=uuid4(),
+        user_id=uuid4(),
+        google_account_id="google-id",
+        email="user@example.com",
+        scopes=["drive.readonly"],
+    )
+    app.dependency_overrides[get_session] = lambda: ConnectionSession(connection)
+    expected_tree = (
+        GoogleFolderNode(
+            id="parent",
+            name="Parent",
+            children=(GoogleFolderNode(id="child", name="Child", children=()),),
+        ),
+    )
+    calls: list[int] = []
+
+    def fake_list_google_folder_hierarchy(
+        _session: Session,
+        _settings: Settings,
+        given_connection: GoogleConnection,
+        *,
+        page_size: int,
+    ) -> tuple[GoogleFolderNode, ...]:
+        assert given_connection is connection
+        calls.append(page_size)
+        return expected_tree
+
+    monkeypatch.setattr(
+        google_drive_module,
+        "list_google_folder_hierarchy",
+        fake_list_google_folder_hierarchy,
+    )
+
+    try:
+        with TestClient(app) as test_client:
+            test_client.cookies.set("google_connection_id", str(connection.id))
+            response = test_client.get("/api/v1/drive/folders/tree?page_size=25")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "id": "parent",
+            "name": "Parent",
+            "children": [{"id": "child", "name": "Child", "children": []}],
+        }
+    ]
+    assert calls == [25]
 
 
 @pytest.mark.parametrize(

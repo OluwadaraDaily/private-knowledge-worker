@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.db.models.google_connection import GoogleConnection
+from app.integrations.google.drive import GoogleDriveError
 from app.integrations.google.interfaces import (
     GoogleDriveFolder,
     GoogleDriveFolderLister,
@@ -36,6 +37,7 @@ class FakeDriveClient:
             folders=(GoogleDriveFolder(id="folder-1", name="Projects", parents=()),),
             next_page_token="next-page",
         )
+        self.folder_pages: dict[str | None, GoogleDriveFolderPage] = {None: self.folder_page}
 
     def verify_access(self, access_token: str) -> None:
         self.access_tokens.append(access_token)
@@ -48,7 +50,7 @@ class FakeDriveClient:
         page_size: int = 100,
     ) -> GoogleDriveFolderPage:
         self.folder_requests.append((access_token, page_token, page_size))
-        return self.folder_page
+        return self.folder_pages.get(page_token, self.folder_page)
 
 
 def test_verify_google_drive_connection_uses_injected_drive_gateway(
@@ -120,6 +122,76 @@ def test_list_google_drive_folders_uses_injected_drive_gateway(
 
     assert page == fake_drive_client.folder_page
     assert fake_drive_client.folder_requests == [("access-token", "previous-page", 25)]
+
+
+def test_list_all_google_drive_folders_follows_page_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings()
+    connection = GoogleConnection(
+        user_id=UUID(int=0),
+        google_account_id="google-id",
+        email="user@example.com",
+        scopes=["drive.readonly"],
+    )
+    session = FakeSession()
+    fake_drive_client = FakeDriveClient()
+    first_page = GoogleDriveFolderPage(
+        folders=(GoogleDriveFolder(id="folder-1", name="One", parents=()),),
+        next_page_token="next-page",
+    )
+    second_page = GoogleDriveFolderPage(
+        folders=(GoogleDriveFolder(id="folder-2", name="Two", parents=()),),
+        next_page_token=None,
+    )
+    fake_drive_client.folder_pages = {None: first_page, "next-page": second_page}
+    monkeypatch.setattr(
+        google_connections_module,
+        "get_valid_google_access_token",
+        lambda *_args: "access-token",
+    )
+
+    folders = google_connections_module.list_all_google_drive_folders(
+        cast(Session, session),
+        settings,
+        connection,
+        page_size=25,
+        drive_client=fake_drive_client,
+    )
+
+    assert [folder.id for folder in folders] == ["folder-1", "folder-2"]
+    assert fake_drive_client.folder_requests == [
+        ("access-token", None, 25),
+        ("access-token", "next-page", 25),
+    ]
+
+
+def test_list_all_google_drive_folders_rejects_repeated_page_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings()
+    connection = GoogleConnection(
+        user_id=UUID(int=0),
+        google_account_id="google-id",
+        email="user@example.com",
+        scopes=[],
+    )
+    fake_drive_client = FakeDriveClient()
+    repeated_page = GoogleDriveFolderPage(folders=(), next_page_token="same-page")
+    fake_drive_client.folder_pages = {None: repeated_page, "same-page": repeated_page}
+    monkeypatch.setattr(
+        google_connections_module,
+        "get_valid_google_access_token",
+        lambda *_args: "access-token",
+    )
+
+    with pytest.raises(GoogleDriveError, match="non-advancing"):
+        google_connections_module.list_all_google_drive_folders(
+            cast(Session, FakeSession()),
+            settings,
+            connection,
+            drive_client=fake_drive_client,
+        )
 
 
 def test_verify_google_drive_connection_propagates_credential_failures(

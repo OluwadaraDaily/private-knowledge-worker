@@ -11,6 +11,7 @@ from app.db.models.google_connection import GoogleConnection
 from app.db.session import get_session
 from app.integrations.google.drive import GoogleDriveError
 from app.services.credentials import GoogleCredentialError
+from app.services.folder_hierarchy import GoogleFolderNode, list_google_folder_hierarchy
 from app.services.google_connections import list_google_drive_folders
 
 
@@ -23,6 +24,12 @@ class GoogleFolderResponse(BaseModel):
 class GoogleFolderPageResponse(BaseModel):
     folders: list[GoogleFolderResponse]
     next_page_token: str | None = None
+
+
+class GoogleFolderTreeResponse(BaseModel):
+    id: str
+    name: str
+    children: list["GoogleFolderTreeResponse"] = Field(default_factory=list)
 
 
 google_drive_router = APIRouter(prefix="/drive")
@@ -61,3 +68,34 @@ def get_google_drive_folders(
         ],
         next_page_token=folder_page.next_page_token,
     )
+
+
+def _folder_node_response(node: GoogleFolderNode) -> GoogleFolderTreeResponse:
+    return GoogleFolderTreeResponse(
+        id=node.id,
+        name=node.name,
+        children=[_folder_node_response(child) for child in node.children],
+    )
+
+
+@google_drive_router.get(
+    "/folders/tree",
+    response_model=list[GoogleFolderTreeResponse],
+    summary="Build the owned Google Drive folder hierarchy",
+)
+def get_google_drive_folder_tree(
+    session: Annotated[Session, Depends(get_session)],
+    connection: Annotated[GoogleConnection, Depends(require_google_connection)],
+    page_size: int = Query(default=100, ge=1, le=1000),
+) -> list[GoogleFolderTreeResponse]:
+    try:
+        folder_tree = list_google_folder_hierarchy(
+            session,
+            get_settings(),
+            connection,
+            page_size=page_size,
+        )
+    except (GoogleCredentialError, GoogleDriveError) as error:
+        raise google_drive_http_exception(error, operation="folder hierarchy") from error
+
+    return [_folder_node_response(node) for node in folder_tree]
