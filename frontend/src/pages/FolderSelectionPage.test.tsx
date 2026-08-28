@@ -40,6 +40,7 @@ describe('FolderSelectionPage', () => {
     await act(async () => {
       await appRouter.navigate({ to: '/folders' })
     })
+    return appRouter
   }
 
   it('loads the owned hierarchy and selects a folder with its descendants', async () => {
@@ -116,5 +117,39 @@ describe('FolderSelectionPage', () => {
       ).toBeInTheDocument(),
     )
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('reuses the cached hierarchy when returning to the route', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => folderTree,
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const appRouter = await renderFoldersPage()
+
+    await screen.findByRole('checkbox', { name: 'Projects' })
+    await act(async () => {
+      await appRouter.navigate({ to: '/' })
+      await appRouter.navigate({ to: '/folders' })
+    })
+
+    expect(
+      await screen.findByRole('checkbox', { name: 'Projects' }),
+    ).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('refetches the hierarchy only when manually requested', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => folderTree,
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    await renderFoldersPage()
+
+    await screen.findByRole('checkbox', { name: 'Projects' })
+    fireEvent.click(screen.getByRole('button', { name: 'refresh' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
   })
 })

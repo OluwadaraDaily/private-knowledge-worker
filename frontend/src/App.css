@@ -230,6 +230,7 @@ p {
 .button:focus-visible,
 .back-link:focus-visible,
 .text-button:focus-visible,
+.tree-refresh-button:focus-visible,
 .brand-button:focus-visible {
   outline: 3px solid var(--coral);
   outline-offset: 4px;
@@ -876,6 +877,24 @@ p {
   font-size: 0.55rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.tree-refresh-button {
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  color: var(--coral-deep);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tree-refresh-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .folder-tree {

@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
-import { useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
 
 import { LogoMark } from '../components/LogoMark'
 
@@ -42,50 +43,22 @@ function getFolderLoadError(error: unknown) {
 }
 
 export function FolderSelectionPage() {
-  const [folders, setFolders] = useState<FolderNode[] | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
-  const [error, setError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-
-  async function loadFolders() {
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      setFolders(await requestFolderTree())
-    } catch (loadError) {
-      setError(getFolderLoadError(loadError))
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function loadInitialFolders() {
-      try {
-        const folderTree = await requestFolderTree()
-        if (!cancelled) {
-          setFolders(folderTree)
-        }
-      } catch (loadError) {
-        if (!cancelled) {
-          setError(getFolderLoadError(loadError))
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false)
-        }
-      }
-    }
-
-    void loadInitialFolders()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  const folderTreeQuery = useQuery<FolderNode[], Error>({
+    queryKey: ['google-drive', 'folders', 'tree'],
+    queryFn: requestFolderTree,
+    staleTime: Infinity,
+    gcTime: 30 * 60 * 1000,
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  })
+  const folders = folderTreeQuery.data ?? null
+  const error = folderTreeQuery.error
+    ? getFolderLoadError(folderTreeQuery.error)
+    : null
+  const isLoading = folderTreeQuery.isPending
+  const isRefreshing = folderTreeQuery.isFetching && !isLoading
 
   const folderMetadata = useMemo(() => {
     const metadata = new Map<string, FolderMeta>()
@@ -208,6 +181,14 @@ export function FolderSelectionPage() {
               <span className="read-only-label">
                 <span className="status-dot" aria-hidden="true" />
                 read only
+                <button
+                  className="tree-refresh-button"
+                  type="button"
+                  onClick={() => void folderTreeQuery.refetch()}
+                  disabled={isRefreshing}
+                >
+                  {isRefreshing ? 'refreshing…' : 'refresh'}
+                </button>
               </span>
             </div>
 
@@ -241,7 +222,7 @@ export function FolderSelectionPage() {
                   <button
                     className="text-button"
                     type="button"
-                    onClick={() => void loadFolders()}
+                    onClick={() => void folderTreeQuery.refetch()}
                   >
                     Try again
                   </button>
@@ -262,7 +243,7 @@ export function FolderSelectionPage() {
                 <button
                   className="text-button"
                   type="button"
-                  onClick={() => void loadFolders()}
+                  onClick={() => void folderTreeQuery.refetch()}
                 >
                   Refresh folders
                 </button>
