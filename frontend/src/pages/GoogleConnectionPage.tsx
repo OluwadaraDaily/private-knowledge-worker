@@ -6,6 +6,7 @@ import { LogoMark } from '../components/LogoMark'
 type Connection = {
   connected: boolean
   email: string | null
+  driveAccess: 'checking' | 'verified' | 'unavailable'
 }
 
 const API_BASE =
@@ -50,15 +51,50 @@ export function GoogleConnectionPage() {
         )
 
         if (!cancelled) {
-          setConnection(
-            connectionResponse.ok
-              ? await connectionResponse.json()
-              : { connected: false, email: null },
-          )
+          const connection = connectionResponse.ok
+            ? await connectionResponse.json()
+            : { connected: false, email: null }
+          setConnection({
+            ...connection,
+            driveAccess: connection.connected ? 'checking' : 'unavailable',
+          })
+
+          if (connection.connected) {
+            try {
+              const verificationResponse = await fetch(
+                API_BASE + '/auth/google/verify',
+                { credentials: 'include' },
+              )
+              if (!cancelled) {
+                setConnection((current) =>
+                  current
+                    ? {
+                        ...current,
+                        driveAccess: verificationResponse.ok
+                          ? 'verified'
+                          : 'unavailable',
+                      }
+                    : current,
+                )
+              }
+            } catch {
+              if (!cancelled) {
+                setConnection((current) =>
+                  current
+                    ? { ...current, driveAccess: 'unavailable' }
+                    : current,
+                )
+              }
+            }
+          }
         }
       } catch {
         if (!cancelled) {
-          setConnection({ connected: false, email: null })
+          setConnection({
+            connected: false,
+            email: null,
+            driveAccess: 'unavailable',
+          })
         }
       }
     }
@@ -84,7 +120,11 @@ export function GoogleConnectionPage() {
         throw new Error('Disconnect failed')
       }
 
-      setConnection({ connected: false, email: null })
+      setConnection({
+        connected: false,
+        email: null,
+        driveAccess: 'unavailable',
+      })
     } catch {
       setError('Unable to disconnect Google.')
     } finally {
@@ -93,6 +133,7 @@ export function GoogleConnectionPage() {
   }
 
   const isConnected = connection?.connected === true
+  const isDriveReady = connection?.driveAccess === 'verified'
 
   return (
     <div className="setup-shell">
@@ -151,19 +192,48 @@ export function GoogleConnectionPage() {
             {isConnected ? (
               <div className="connected-account">
                 <div className="account-status">
-                  <span className="status-dot" aria-hidden="true" />
-                  <span>Connected</span>
+                  <span
+                    className={`status-dot${
+                      connection.driveAccess === 'unavailable'
+                        ? ' status-dot-unavailable'
+                        : ''
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <span>
+                    {isDriveReady
+                      ? 'Connected'
+                      : connection.driveAccess === 'checking'
+                        ? 'Checking Drive access…'
+                        : 'Drive access unavailable'}
+                  </span>
                 </div>
                 <strong>{connection.email}</strong>
-                <Link
-                  className="button button-dark connection-next-button"
-                  to="/folders"
-                >
-                  <span>Choose folders</span>
-                  <span className="button-arrow" aria-hidden="true">
-                    ↗
-                  </span>
-                </Link>
+                {isDriveReady ? (
+                  <Link
+                    className="button button-dark connection-next-button"
+                    to="/folders"
+                  >
+                    <span>Choose folders</span>
+                    <span className="button-arrow" aria-hidden="true">
+                      ↗
+                    </span>
+                  </Link>
+                ) : connection.driveAccess === 'checking' ? (
+                  <p className="connection-verification-status">
+                    Checking Drive access…
+                  </p>
+                ) : (
+                  <a
+                    className="button button-dark connection-next-button"
+                    href={API_BASE + '/auth/google/start?force_reconsent=true'}
+                  >
+                    <span>Reconnect Google</span>
+                    <span className="button-arrow" aria-hidden="true">
+                      ↗
+                    </span>
+                  </a>
+                )}
                 <button
                   className="text-button"
                   type="button"

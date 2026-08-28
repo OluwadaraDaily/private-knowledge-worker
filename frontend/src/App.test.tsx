@@ -75,6 +75,7 @@ describe('App', () => {
         json: async () => ({ connected: true, email: 'user@example.com' }),
       })
       .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({ ok: true })
     vi.stubGlobal('fetch', fetchMock)
     await renderAppAtHome()
     fireEvent.click(
@@ -103,6 +104,7 @@ describe('App', () => {
         ok: true,
         json: async () => ({ connected: true, email: 'user@example.com' }),
       })
+      .mockResolvedValueOnce({ ok: true })
       .mockResolvedValueOnce({ ok: false })
     vi.stubGlobal('fetch', fetchMock)
     await renderAppAtHome()
@@ -117,6 +119,35 @@ describe('App', () => {
       'Unable to disconnect Google.',
     )
     expect(screen.getByText('user@example.com')).toBeInTheDocument()
+  })
+
+  it('does not offer folder access when Drive verification fails', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'ok' }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ connected: true, email: 'user@example.com' }),
+      })
+      .mockResolvedValueOnce({ ok: false })
+    vi.stubGlobal('fetch', fetchMock)
+    await renderAppAtHome()
+    fireEvent.click(
+      screen.getByRole('link', { name: 'Start with your knowledge' }),
+    )
+
+    expect(
+      await screen.findByText('Drive access unavailable'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: 'Reconnect Google' }),
+    ).toHaveAttribute(
+      'href',
+      'http://127.0.0.1:8000/api/v1/auth/google/start?force_reconsent=true',
+    )
+    expect(
+      screen.queryByRole('link', { name: 'Choose folders' }),
+    ).not.toBeInTheDocument()
   })
 
   it('reports when the backend is unavailable', async () => {

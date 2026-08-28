@@ -139,6 +139,11 @@ button {
   box-shadow: 0 0 0 0.2rem rgba(113, 155, 41, 0.13);
 }
 
+.status-dot-unavailable {
+  background: var(--coral-deep);
+  box-shadow: 0 0 0 0.2rem rgba(168, 81, 61, 0.13);
+}
+
 .hero-section {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(28rem, 1.1fr);
@@ -690,6 +695,13 @@ p {
   text-transform: uppercase;
 }
 
+.connection-verification-status {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+}
+
 .connected-account strong {
   display: block;
   margin-bottom: 1rem;
@@ -1102,8 +1114,11 @@ p {
 }
 
 .selection-summary {
-  align-self: start;
+  display: flex;
+  align-self: stretch;
+  flex-direction: column;
   min-height: 20rem;
+  overflow: hidden;
   padding: 1.5rem;
   background: var(--coral);
   box-shadow: 0.75rem 0.75rem 0 var(--ink);
@@ -1121,11 +1136,17 @@ p {
 }
 
 .selected-folder-list {
+  min-height: 0;
+  flex: 1 1 auto;
   display: grid;
   gap: 0.8rem;
   margin: 0;
   padding: 0;
+  overflow-y: auto;
   list-style: none;
+  scrollbar-color: var(--coral-deep) transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
 }
 
 .selected-folder-list li {
