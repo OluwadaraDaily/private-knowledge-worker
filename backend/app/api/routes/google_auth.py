@@ -47,9 +47,14 @@ google_auth_router = APIRouter(prefix="/auth/google")
 @google_auth_router.get("/start", summary="Start Google OAuth authorization")
 def start_google_oauth(
     session: Annotated[Session, Depends(get_session)],
+    force_reconsent: bool = Query(default=False),
 ) -> RedirectResponse:
     try:
-        authorization = create_oauth_authorization_url(session, get_settings())
+        authorization = create_oauth_authorization_url(
+            session,
+            get_settings(),
+            force_reconsent=force_reconsent,
+        )
     except ValueError as error:
         raise HTTPException(status_code=503, detail="Google OAuth is not configured") from error
     except SQLAlchemyError as error:

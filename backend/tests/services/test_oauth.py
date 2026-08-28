@@ -77,6 +77,25 @@ def test_create_oauth_authorization_url_requires_client_id() -> None:
         create_oauth_authorization_url(cast(Session, FakeSession()), settings)
 
 
+def test_create_oauth_authorization_url_can_force_reconsent() -> None:
+    session = FakeSession()
+    settings = Settings(
+        backend_url=AnyHttpUrl("http://127.0.0.1:8000"),
+        oauth_client_id="client-id",
+    )
+
+    authorization = create_oauth_authorization_url(
+        cast(Session, session),
+        settings,
+        force_reconsent=True,
+    )
+
+    query = parse_qs(urlparse(authorization.url).query)
+
+    assert query["access_type"] == ["offline"]
+    assert query["prompt"] == ["consent"]
+
+
 def test_create_oauth_authorization_url_deletes_expired_states() -> None:
     now = datetime.now(UTC)
     session = ExpiringStateSession()
@@ -124,3 +143,25 @@ def test_start_google_oauth_redirects_to_google(monkeypatch: pytest.MonkeyPatch)
     assert response.status_code == 307
     assert response.headers["location"].startswith("https://accounts.google.com/o/oauth2/v2/auth?")
     assert session.commits == 1
+
+
+def test_start_google_oauth_can_force_reconsent(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = FakeSession()
+    application = create_app()
+    application.dependency_overrides[get_session] = lambda: session
+    monkeypatch.setattr(
+        google_auth_module,
+        "get_settings",
+        lambda: Settings(
+            backend_url=AnyHttpUrl("http://127.0.0.1:8000"),
+            oauth_client_id="client-id",
+        ),
+    )
+
+    with TestClient(application, follow_redirects=False) as client:
+        response = client.get("/api/v1/auth/google/start?force_reconsent=true")
+    application.dependency_overrides.clear()
+
+    query = parse_qs(urlparse(response.headers["location"]).query)
+    assert response.status_code == 307
+    assert query["prompt"] == ["consent"]

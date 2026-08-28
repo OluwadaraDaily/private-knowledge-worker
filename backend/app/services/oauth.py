@@ -88,7 +88,12 @@ class GoogleOAuthClient:
         return f"{str(self.settings.backend_url).rstrip('/')}/api/v1/auth/google/callback"
 
 
-def create_oauth_authorization_url(session: Session, settings: Settings) -> OAuthAuthorization:
+def create_oauth_authorization_url(
+    session: Session,
+    settings: Settings,
+    *,
+    force_reconsent: bool = False,
+) -> OAuthAuthorization:
     if not settings.oauth_client_id:
         raise ValueError("OAuth client ID is not configured")
 
@@ -104,17 +109,18 @@ def create_oauth_authorization_url(session: Session, settings: Settings) -> OAut
     session.commit()
 
     redirect_uri = f"{str(settings.backend_url).rstrip('/')}/api/v1/auth/google/callback"
-    query = urlencode(
-        {
-            "client_id": settings.oauth_client_id,
-            "redirect_uri": redirect_uri,
-            "response_type": "code",
-            "scope": " ".join(settings.oauth_scopes),
-            "state": raw_state,
-            "access_type": "offline",
-            "include_granted_scopes": "true",
-        }
-    )
+    query_parameters = {
+        "client_id": settings.oauth_client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": " ".join(settings.oauth_scopes),
+        "state": raw_state,
+        "access_type": "offline",
+        "include_granted_scopes": "true",
+    }
+    if force_reconsent:
+        query_parameters["prompt"] = "consent"
+    query = urlencode(query_parameters)
     return OAuthAuthorization(url=f"{OAUTH_AUTHORIZATION_URL}?{query}", state=raw_state)
 
 
