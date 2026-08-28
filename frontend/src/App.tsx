@@ -93,9 +93,7 @@ function App() {
         <section aria-labelledby="google-connection-heading">
           <h2 id="google-connection-heading">Connect Google</h2>
           <p>Connect your Google account to search your owned Docs.</p>
-          <a href={`${API_URL}/auth/google/start?force_reconsent=true`}>
-            Connect Google
-          </a>
+          <a href={`${API_URL}/auth/google/start`}>Connect Google</a>
         </section>
       )}
       {connectionError && <p role="alert">{connectionError}</p>}
