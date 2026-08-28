@@ -897,16 +897,21 @@ p {
   opacity: 0.65;
 }
 
-.folder-tree {
+.folder-tree-scroll {
   max-height: min(38rem, 58vh);
+  /* Prevent nested tree overflow from increasing the page's scroll height. */
+  contain: paint;
   overflow-y: auto;
   overscroll-behavior-y: contain;
-  margin: 0;
-  padding: 0.6rem 0;
-  list-style: none;
   scrollbar-color: var(--muted) transparent;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
+}
+
+.folder-tree {
+  margin: 0;
+  padding: 0.6rem 0;
+  list-style: none;
 }
 
 .folder-tree-children {

@@ -251,18 +251,20 @@ export function FolderSelectionPage() {
             )}
 
             {!isLoading && !error && hasFolders && folders && (
-              <ul className="folder-tree" aria-label="Google Drive folders">
-                {folders.map((folder) => (
-                  <FolderTreeNode
-                    key={folder.id}
-                    node={folder}
-                    depth={0}
-                    selectedIds={selectedIds}
-                    isIncludedBySelection={isIncludedBySelection}
-                    onToggle={toggleFolder}
-                  />
-                ))}
-              </ul>
+              <div className="folder-tree-scroll">
+                <ul className="folder-tree" aria-label="Google Drive folders">
+                  {folders.map((folder) => (
+                    <FolderTreeNode
+                      key={folder.id}
+                      node={folder}
+                      depth={0}
+                      selectedIds={selectedIds}
+                      isIncludedBySelection={isIncludedBySelection}
+                      onToggle={toggleFolder}
+                    />
+                  ))}
+                </ul>
+              </div>
             )}
 
             {!isLoading && !error && hasFolders && (
