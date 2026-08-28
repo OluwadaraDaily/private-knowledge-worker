@@ -6,7 +6,12 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.db.models.google_connection import GoogleConnection
-from app.integrations.google.interfaces import GoogleDriveGateway
+from app.integrations.google.interfaces import (
+    GoogleDriveFolder,
+    GoogleDriveFolderLister,
+    GoogleDriveFolderPage,
+    GoogleDriveVerifier,
+)
 from app.services import google_connections as google_connections_module
 from app.services.credentials import GoogleCredentialError
 
@@ -26,9 +31,24 @@ class FakeSession:
 class FakeDriveClient:
     def __init__(self) -> None:
         self.access_tokens: list[str] = []
+        self.folder_requests: list[tuple[str, str | None, int]] = []
+        self.folder_page = GoogleDriveFolderPage(
+            folders=(GoogleDriveFolder(id="folder-1", name="Projects", parents=()),),
+            next_page_token="next-page",
+        )
 
     def verify_access(self, access_token: str) -> None:
         self.access_tokens.append(access_token)
+
+    def list_folders(
+        self,
+        access_token: str,
+        *,
+        page_token: str | None = None,
+        page_size: int = 100,
+    ) -> GoogleDriveFolderPage:
+        self.folder_requests.append((access_token, page_token, page_size))
+        return self.folder_page
 
 
 def test_verify_google_drive_connection_uses_injected_drive_gateway(
@@ -44,7 +64,7 @@ def test_verify_google_drive_connection_uses_injected_drive_gateway(
     session = FakeSession()
     session_as_orm = cast(Session, session)
     fake_drive_client = FakeDriveClient()
-    drive_client: GoogleDriveGateway = fake_drive_client
+    drive_client: GoogleDriveVerifier = fake_drive_client
 
     def fake_get_valid_google_access_token(
         given_session: Session,
@@ -67,6 +87,39 @@ def test_verify_google_drive_connection_uses_injected_drive_gateway(
     )
 
     assert fake_drive_client.access_tokens == ["access-token"]
+
+
+def test_list_google_drive_folders_uses_injected_drive_gateway(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings()
+    connection = GoogleConnection(
+        user_id=UUID(int=0),
+        google_account_id="google-id",
+        email="user@example.com",
+        scopes=["drive.readonly"],
+    )
+    session = FakeSession()
+    session_as_orm = cast(Session, session)
+    fake_drive_client = FakeDriveClient()
+    drive_client: GoogleDriveFolderLister = fake_drive_client
+    monkeypatch.setattr(
+        google_connections_module,
+        "get_valid_google_access_token",
+        lambda *_args: "access-token",
+    )
+
+    page = google_connections_module.list_google_drive_folders(
+        session_as_orm,
+        settings,
+        connection,
+        page_token="previous-page",
+        page_size=25,
+        drive_client=drive_client,
+    )
+
+    assert page == fake_drive_client.folder_page
+    assert fake_drive_client.folder_requests == [("access-token", "previous-page", 25)]
 
 
 def test_verify_google_drive_connection_propagates_credential_failures(

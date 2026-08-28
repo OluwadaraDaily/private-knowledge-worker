@@ -10,6 +10,7 @@ from app.api.dependencies.google import (
     get_optional_google_connection,
     require_google_connection,
 )
+from app.api.errors.google import google_drive_http_exception
 from app.core.config import get_settings
 from app.db.models.google_connection import GoogleConnection
 from app.db.session import get_session
@@ -144,18 +145,8 @@ def verify_google_drive(
     settings = get_settings()
     try:
         verify_google_drive_connection(session, settings, connection)
-    except GoogleDriveAuthenticationError as error:
-        raise HTTPException(
-            status_code=401,
-            detail="Google authentication is no longer valid; reconnect Google",
-        ) from error
-    except GoogleCredentialError as error:
-        raise HTTPException(
-            status_code=401,
-            detail="Google authentication is unavailable; reconnect Google",
-        ) from error
-    except GoogleDriveError as error:
-        raise HTTPException(status_code=502, detail="Google Drive verification failed") from error
+    except (GoogleDriveAuthenticationError, GoogleCredentialError, GoogleDriveError) as error:
+        raise google_drive_http_exception(error) from error
 
     return GoogleDriveVerification(authenticated=True, email=connection.email)
 

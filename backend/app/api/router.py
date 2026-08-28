@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.api.routes.google_auth import google_auth_router
+from app.api.routes.google_drive import google_drive_router
 
 
 class ApiInfo(BaseModel):
@@ -15,6 +16,7 @@ class HealthStatus(BaseModel):
 
 api_router = APIRouter()
 api_router.include_router(google_auth_router)
+api_router.include_router(google_drive_router)
 
 
 @api_router.get("/health", response_model=HealthStatus, summary="Check application health")
