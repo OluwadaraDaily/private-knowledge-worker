@@ -145,16 +145,11 @@ def test_google_drive_verify_makes_authenticated_request_for_connection(
     )
     session = ConnectionSession(connection)
     app.dependency_overrides[get_session] = lambda: session
-    access_tokens: list[str] = []
+    verified_connections: list[GoogleConnection] = []
     monkeypatch.setattr(
         google_auth_module,
-        "get_valid_google_access_token",
-        lambda *_args: "access-token",
-    )
-    monkeypatch.setattr(
-        google_auth_module,
-        "verify_google_drive_access",
-        lambda access_token: access_tokens.append(access_token),
+        "verify_google_drive_connection",
+        lambda _session, _settings, given_connection: verified_connections.append(given_connection),
     )
 
     try:
@@ -166,7 +161,7 @@ def test_google_drive_verify_makes_authenticated_request_for_connection(
 
     assert response.status_code == 200
     assert response.json() == {"authenticated": True, "email": "user@example.com"}
-    assert access_tokens == ["access-token"]
+    assert verified_connections == [connection]
 
 
 def test_google_drive_verify_requires_a_connection() -> None:
@@ -196,13 +191,8 @@ def test_google_drive_verify_reports_invalid_google_authentication(
     app.dependency_overrides[get_session] = lambda: ConnectionSession(connection)
     monkeypatch.setattr(
         google_auth_module,
-        "get_valid_google_access_token",
-        lambda *_args: "access-token",
-    )
-    monkeypatch.setattr(
-        google_auth_module,
-        "verify_google_drive_access",
-        lambda _access_token: (_ for _ in ()).throw(
+        "verify_google_drive_connection",
+        lambda *_args: (_ for _ in ()).throw(
             GoogleDriveAuthenticationError("provider rejected token")
         ),
     )
@@ -234,15 +224,8 @@ def test_google_drive_verify_hides_upstream_failure_details(
     app.dependency_overrides[get_session] = lambda: ConnectionSession(connection)
     monkeypatch.setattr(
         google_auth_module,
-        "get_valid_google_access_token",
-        lambda *_args: "access-token",
-    )
-    monkeypatch.setattr(
-        google_auth_module,
-        "verify_google_drive_access",
-        lambda _access_token: (_ for _ in ()).throw(
-            GoogleDriveError("provider body contains a secret")
-        ),
+        "verify_google_drive_connection",
+        lambda *_args: (_ for _ in ()).throw(GoogleDriveError("provider body contains a secret")),
     )
 
     try:

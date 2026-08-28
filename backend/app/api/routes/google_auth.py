@@ -3,7 +3,6 @@ from typing import Annotated
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import delete
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -16,13 +15,15 @@ from app.db.models.google_connection import GoogleConnection
 from app.db.session import get_session
 from app.services.credentials import (
     GoogleCredentialError,
-    get_valid_google_access_token,
     persist_google_credentials,
 )
 from app.services.drive import (
     GoogleDriveAuthenticationError,
     GoogleDriveError,
-    verify_google_drive_access,
+)
+from app.services.google_connections import (
+    disconnect_google_connection,
+    verify_google_drive_connection,
 )
 from app.services.oauth import (
     OAuthExchangeError,
@@ -142,8 +143,7 @@ def verify_google_drive(
 ) -> GoogleDriveVerification:
     settings = get_settings()
     try:
-        access_token = get_valid_google_access_token(session, settings, connection)
-        verify_google_drive_access(access_token)
+        verify_google_drive_connection(session, settings, connection)
     except GoogleDriveAuthenticationError as error:
         raise HTTPException(
             status_code=401,
@@ -169,8 +169,7 @@ def disconnect_google(
     ],
 ) -> Response:
     if connection is not None:
-        session.execute(delete(GoogleConnection).where(GoogleConnection.id == connection.id))
-        session.commit()
+        disconnect_google_connection(session, connection)
     response = Response(status_code=204)
     response.delete_cookie(GOOGLE_CONNECTION_COOKIE)
     return response
