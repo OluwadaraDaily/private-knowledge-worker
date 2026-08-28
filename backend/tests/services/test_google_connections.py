@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.db.models.google_connection import GoogleConnection
+from app.integrations.google.interfaces import GoogleDriveGateway
 from app.services import google_connections as google_connections_module
 from app.services.credentials import GoogleCredentialError
 
@@ -22,7 +23,15 @@ class FakeSession:
         self.commits += 1
 
 
-def test_verify_google_drive_connection_delegates_token_and_drive_work(
+class FakeDriveClient:
+    def __init__(self) -> None:
+        self.access_tokens: list[str] = []
+
+    def verify_access(self, access_token: str) -> None:
+        self.access_tokens.append(access_token)
+
+
+def test_verify_google_drive_connection_uses_injected_drive_gateway(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings = Settings()
@@ -34,36 +43,30 @@ def test_verify_google_drive_connection_delegates_token_and_drive_work(
     )
     session = FakeSession()
     session_as_orm = cast(Session, session)
-    calls: list[str] = []
+    fake_drive_client = FakeDriveClient()
+    drive_client: GoogleDriveGateway = fake_drive_client
 
     def fake_get_valid_google_access_token(
         given_session: Session,
         given_settings: Settings,
         given_connection: GoogleConnection,
     ) -> str:
-        calls.append(
-            f"token:{given_session is session_as_orm}:"
-            f"{given_settings is settings}:{given_connection is connection}"
-        )
+        assert given_session is session_as_orm
+        assert given_settings is settings
+        assert given_connection is connection
         return "access-token"
-
-    def fake_verify_google_drive_access(access_token: str) -> None:
-        calls.append(f"drive:{access_token}")
 
     monkeypatch.setattr(
         google_connections_module,
         "get_valid_google_access_token",
         fake_get_valid_google_access_token,
     )
-    monkeypatch.setattr(
-        google_connections_module,
-        "verify_google_drive_access",
-        fake_verify_google_drive_access,
+
+    google_connections_module.verify_google_drive_connection(
+        session_as_orm, settings, connection, drive_client
     )
 
-    google_connections_module.verify_google_drive_connection(session_as_orm, settings, connection)
-
-    assert calls == ["token:True:True:True", "drive:access-token"]
+    assert fake_drive_client.access_tokens == ["access-token"]
 
 
 def test_verify_google_drive_connection_propagates_credential_failures(
@@ -81,12 +84,6 @@ def test_verify_google_drive_connection_propagates_credential_failures(
         "get_valid_google_access_token",
         lambda *_args: (_ for _ in ()).throw(GoogleCredentialError("refresh failed")),
     )
-    monkeypatch.setattr(
-        google_connections_module,
-        "verify_google_drive_access",
-        lambda _access_token: pytest.fail("Drive should not be called after credential failure"),
-    )
-
     with pytest.raises(GoogleCredentialError, match="refresh failed"):
         google_connections_module.verify_google_drive_connection(
             cast(Session, FakeSession()), settings, connection

@@ -13,13 +13,13 @@ from app.api.dependencies.google import (
 from app.core.config import get_settings
 from app.db.models.google_connection import GoogleConnection
 from app.db.session import get_session
+from app.integrations.google.drive import (
+    GoogleDriveAuthenticationError,
+    GoogleDriveError,
+)
 from app.services.credentials import (
     GoogleCredentialError,
     persist_google_credentials,
-)
-from app.services.drive import (
-    GoogleDriveAuthenticationError,
-    GoogleDriveError,
 )
 from app.services.google_connections import (
     disconnect_google_connection,

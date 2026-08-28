@@ -12,8 +12,8 @@ from app.api.routes import google_auth as google_auth_module
 from app.core.config import Settings
 from app.db.models.google_connection import GoogleConnection
 from app.db.session import get_session
+from app.integrations.google.drive import GoogleDriveAuthenticationError, GoogleDriveError
 from app.main import create_app
-from app.services.drive import GoogleDriveAuthenticationError, GoogleDriveError
 
 
 class ConnectionSession:

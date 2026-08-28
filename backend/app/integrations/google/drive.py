@@ -12,18 +12,15 @@ class GoogleDriveAuthenticationError(GoogleDriveError):
 
 
 class GoogleDriveClient:
-    """Small authenticated Google Drive client used during connection verification."""
+    """HTTP client for the Google Drive API."""
 
-    def __init__(self, access_token: str) -> None:
-        self.access_token = access_token
-
-    def verify_access(self) -> None:
+    def verify_access(self, access_token: str) -> None:
         try:
             with httpx.Client(timeout=10.0) as client:
                 response = client.get(
                     GOOGLE_DRIVE_ABOUT_URL,
                     params={"fields": "user"},
-                    headers={"Authorization": f"Bearer {self.access_token}"},
+                    headers={"Authorization": f"Bearer {access_token}"},
                 )
                 response.raise_for_status()
         except httpx.HTTPStatusError as error:
@@ -34,8 +31,3 @@ class GoogleDriveClient:
             raise GoogleDriveError("Google Drive request failed") from error
         except httpx.HTTPError as error:
             raise GoogleDriveError("Google Drive request failed") from error
-
-
-def verify_google_drive_access(access_token: str) -> None:
-    """Make one minimal authenticated request to Google Drive."""
-    GoogleDriveClient(access_token).verify_access()
