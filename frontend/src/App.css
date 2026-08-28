@@ -699,6 +699,10 @@ p {
   white-space: nowrap;
 }
 
+.connection-next-button {
+  margin-bottom: 1rem;
+}
+
 .text-button {
   padding: 0;
   border: 0;
@@ -767,6 +771,431 @@ p {
 .error-message {
   margin-top: 0.5rem;
   color: var(--coral-deep);
+}
+
+.folder-selection-shell {
+  background:
+    radial-gradient(
+      circle at 90% 14%,
+      rgba(215, 243, 107, 0.3),
+      transparent 24rem
+    ),
+    var(--paper);
+}
+
+.folder-selection-main {
+  max-width: 1280px;
+}
+
+.folder-selection-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, 17rem);
+  align-items: end;
+  gap: 3rem;
+  padding: clamp(4rem, 8vw, 7rem) 0 3.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.folder-selection-heading h1 {
+  max-width: 9ch;
+  margin: 1rem 0 1.4rem;
+  font-family: var(--display);
+  font-size: clamp(3.6rem, 7vw, 6.6rem);
+  font-weight: 400;
+  letter-spacing: -0.075em;
+  line-height: 0.9;
+}
+
+.selection-counter {
+  display: grid;
+  align-content: end;
+  justify-items: start;
+  min-height: 8.5rem;
+  padding: 1.15rem 1.25rem;
+  border-left: 1px solid var(--ink);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  line-height: 1.5;
+}
+
+.selection-counter strong {
+  margin: 0.3rem 0 0.1rem;
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: 4rem;
+  font-weight: 400;
+  letter-spacing: -0.08em;
+  line-height: 0.85;
+}
+
+.selection-counter-label {
+  color: var(--coral-deep);
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.folder-selection-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(17rem, 0.7fr);
+  gap: clamp(2rem, 5vw, 5.5rem);
+  padding: 3.5rem 0 5rem;
+}
+
+.folder-tree-card {
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.54);
+}
+
+.folder-tree-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.4rem 1.5rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.folder-tree-card-header h2 {
+  margin: 0.45rem 0 0;
+  font-family: var(--display);
+  font-size: 2rem;
+  font-weight: 400;
+  letter-spacing: -0.06em;
+}
+
+.read-only-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding-top: 0.2rem;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.folder-tree {
+  max-height: min(38rem, 58vh);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  margin: 0;
+  padding: 0.6rem 0;
+  list-style: none;
+  scrollbar-color: var(--muted) transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.folder-tree-children {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.folder-tree-row {
+  display: flex;
+  align-items: center;
+  min-height: 3.2rem;
+  padding-right: 1rem;
+  transition: background-color 150ms ease;
+}
+
+.folder-tree-row:hover {
+  background: rgba(239, 170, 140, 0.12);
+}
+
+.folder-tree-toggle,
+.folder-tree-spacer {
+  display: inline-grid;
+  flex: 0 0 1.55rem;
+  width: 1.55rem;
+  height: 1.55rem;
+  place-items: center;
+}
+
+.folder-tree-toggle {
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.folder-tree-toggle:hover {
+  color: var(--ink);
+  background: var(--paper-deep);
+}
+
+.folder-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+  padding: 0.45rem 0;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.folder-choice input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.folder-checkmark {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 1.15rem;
+  height: 1.15rem;
+  border: 1px solid var(--muted);
+  border-radius: 0.22rem;
+  background: var(--paper);
+}
+
+.folder-choice input:checked + .folder-checkmark {
+  border-color: var(--ink);
+  background: var(--lime);
+}
+
+.folder-choice input:checked + .folder-checkmark::after {
+  position: absolute;
+  top: 0.21rem;
+  left: 0.36rem;
+  width: 0.3rem;
+  height: 0.55rem;
+  border: solid var(--ink);
+  border-width: 0 2px 2px 0;
+  content: '';
+  transform: rotate(45deg);
+}
+
+.folder-choice input:focus-visible + .folder-checkmark {
+  outline: 3px solid var(--coral);
+  outline-offset: 3px;
+}
+
+.folder-choice-included {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.folder-choice-included .folder-checkmark {
+  border-color: var(--line);
+  background: var(--paper-deep);
+}
+
+.folder-choice-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-included-label {
+  margin-left: 0.15rem;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.folder-tree-footnote {
+  margin: 0;
+  padding: 1rem 1.5rem 1.1rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  line-height: 1.5;
+}
+
+.folder-tree-state {
+  display: grid;
+  justify-items: start;
+  gap: 0.65rem;
+  min-height: 17rem;
+  padding: 2.5rem 1.5rem;
+  align-content: center;
+}
+
+.folder-tree-state strong {
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: 1.7rem;
+  font-weight: 400;
+  letter-spacing: -0.05em;
+}
+
+.folder-tree-state p {
+  max-width: 25rem;
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.folder-tree-state-error strong,
+.folder-tree-state-error .state-mark {
+  color: var(--coral-deep);
+}
+
+.state-mark {
+  display: inline-grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+}
+
+.state-mark-loading {
+  border-color: var(--lime-deep);
+  border-right-color: transparent;
+  animation: folder-state-spin 900ms linear infinite;
+}
+
+@keyframes folder-state-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.folder-tree-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.1rem;
+}
+
+.selection-summary {
+  align-self: start;
+  min-height: 20rem;
+  padding: 1.5rem;
+  background: var(--coral);
+  box-shadow: 0.75rem 0.75rem 0 var(--ink);
+}
+
+.selection-summary h2 {
+  max-width: 8ch;
+  margin: 0.6rem 0 2rem;
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 400;
+  letter-spacing: -0.07em;
+  line-height: 0.95;
+}
+
+.selected-folder-list {
+  display: grid;
+  gap: 0.8rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.selected-folder-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.65rem;
+  padding: 0.8rem 0;
+  border-top: 1px solid rgba(168, 81, 61, 0.38);
+}
+
+.selected-folder-list .folder-icon {
+  margin-top: 0.2rem;
+  color: var(--coral-deep);
+}
+
+.selected-folder-list strong,
+.selected-folder-list small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selected-folder-list strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+
+.selected-folder-list small {
+  margin-top: 0.25rem;
+  color: var(--coral-deep);
+  font-family: var(--mono);
+  font-size: 0.52rem;
+}
+
+.remove-folder-button {
+  padding: 0;
+  border: 0;
+  color: var(--coral-deep);
+  background: transparent;
+  cursor: pointer;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.selection-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  color: var(--coral-deep);
+}
+
+.selection-empty-line {
+  flex: 0 0 2.2rem;
+  height: 1px;
+  margin-top: 0.65rem;
+  background: var(--coral-deep);
+}
+
+.selection-empty p {
+  max-width: 14rem;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  line-height: 1.6;
+}
+
+.selection-summary-note {
+  display: flex;
+  gap: 0.55rem;
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(168, 81, 61, 0.38);
+}
+
+.selection-summary-note .lock-icon {
+  border-color: var(--coral-deep);
+}
+
+.selection-summary-note .lock-icon::before {
+  border-color: var(--coral-deep);
+}
+
+.selection-summary-note p {
+  margin: 0;
+  color: var(--coral-deep);
+  font-family: var(--mono);
+  font-size: 0.57rem;
+  line-height: 1.5;
 }
 
 @media (max-width: 900px) {
@@ -882,14 +1311,63 @@ p {
   .connection-card {
     box-shadow: 0.5rem 0.5rem 0 var(--lime);
   }
+
+  .folder-selection-heading {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+    padding-top: 4rem;
+  }
+
+  .folder-selection-heading h1 {
+    font-size: clamp(3.2rem, 16vw, 5.2rem);
+  }
+
+  .selection-counter {
+    min-height: 0;
+    padding: 1rem 0 0;
+    border-top: 1px solid var(--ink);
+    border-left: 0;
+  }
+
+  .folder-selection-layout {
+    grid-template-columns: 1fr;
+    padding-top: 2.5rem;
+  }
+
+  .folder-tree-card-header {
+    padding: 1.2rem 1rem 1.1rem;
+  }
+
+  .folder-tree-row {
+    padding-right: 0.65rem;
+  }
+
+  .folder-tree-footnote {
+    padding-right: 1rem;
+    padding-left: 1rem;
+  }
+
+  .folder-tree-state {
+    padding-right: 1rem;
+    padding-left: 1rem;
+  }
+
+  .selection-summary {
+    box-shadow: 0.5rem 0.5rem 0 var(--ink);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .button {
+  .button,
+  .folder-tree-row {
     transition: none;
   }
 
   .button:hover {
     transform: none;
+  }
+
+  .state-mark-loading {
+    animation: none;
   }
 }

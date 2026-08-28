@@ -155,6 +155,15 @@ export function GoogleConnectionPage() {
                   <span>Connected</span>
                 </div>
                 <strong>{connection.email}</strong>
+                <Link
+                  className="button button-dark connection-next-button"
+                  to="/folders"
+                >
+                  <span>Choose folders</span>
+                  <span className="button-arrow" aria-hidden="true">
+                    ↗
+                  </span>
+                </Link>
                 <button
                   className="text-button"
                   type="button"

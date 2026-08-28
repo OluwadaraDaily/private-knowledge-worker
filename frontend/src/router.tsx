@@ -6,6 +6,7 @@ import {
 } from '@tanstack/react-router'
 
 import { GoogleConnectionPage } from './pages/GoogleConnectionPage'
+import { FolderSelectionPage } from './pages/FolderSelectionPage'
 import { LandingPage } from './pages/LandingPage'
 
 const rootRoute = createRootRoute({
@@ -24,7 +25,17 @@ const connectRoute = createRoute({
   component: GoogleConnectionPage,
 })
 
-const routeTree = rootRoute.addChildren([homeRoute, connectRoute])
+const folderSelectionRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/folders',
+  component: FolderSelectionPage,
+})
+
+const routeTree = rootRoute.addChildren([
+  homeRoute,
+  connectRoute,
+  folderSelectionRoute,
+])
 
 export function createAppRouter() {
   return createRouter({
