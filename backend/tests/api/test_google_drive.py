@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.routes import google_drive as google_drive_module
 from app.core.config import Settings
 from app.db.models.google_connection import GoogleConnection
+from app.db.models.indexed_folder import IndexedFolder
 from app.db.session import get_session
 from app.integrations.google.client import GoogleApiError
 from app.integrations.google.interfaces import GoogleDriveFolder, GoogleDriveFolderPage
@@ -21,6 +22,34 @@ class ConnectionSession:
     def scalar(self, statement: object) -> GoogleConnection | None:
         del statement
         return self.connection
+
+
+class SelectedFolderSession(ConnectionSession):
+    def __init__(self, connection: GoogleConnection, folders: list[IndexedFolder]) -> None:
+        super().__init__(connection)
+        self.folders = folders
+        self.commits = 0
+
+    def scalars(self, statement: object) -> object:
+        del statement
+
+        class Result:
+            def __init__(self, folders: list[IndexedFolder]) -> None:
+                self.folders = folders
+
+            def all(self) -> list[IndexedFolder]:
+                return self.folders
+
+        return Result(self.folders)
+
+    def add(self, folder: IndexedFolder) -> None:
+        self.folders.append(folder)
+
+    def delete(self, folder: IndexedFolder) -> None:
+        self.folders.remove(folder)
+
+    def commit(self) -> None:
+        self.commits += 1
 
 
 def test_list_google_drive_folders_returns_a_page_and_forwards_pagination(
@@ -139,6 +168,71 @@ def test_get_google_drive_folder_tree_returns_nested_nodes(
         }
     ]
     assert calls == [25]
+
+
+def test_selected_folders_can_be_loaded_and_replaced() -> None:
+    app = create_app()
+    connection = GoogleConnection(
+        id=uuid4(),
+        user_id=uuid4(),
+        google_account_id="google-id",
+        email="user@example.com",
+        scopes=["drive.readonly"],
+    )
+    session = SelectedFolderSession(
+        connection,
+        [IndexedFolder(user_id=connection.user_id, google_folder_id="old", name="Old")],
+    )
+    app.dependency_overrides[get_session] = lambda: session
+
+    try:
+        with TestClient(app) as test_client:
+            test_client.cookies.set("google_connection_id", str(connection.id))
+            loaded = test_client.get("/api/v1/drive/folders/selected")
+            replaced = test_client.put(
+                "/api/v1/drive/folders/selected",
+                json={"folders": [{"id": "new", "name": "New"}]},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert loaded.status_code == 200
+    assert loaded.json() == [{"id": "old", "name": "Old"}]
+    assert replaced.status_code == 200
+    assert replaced.json() == [{"id": "new", "name": "New"}]
+    assert session.commits == 1
+
+
+def test_selected_folders_reject_duplicate_ids() -> None:
+    app = create_app()
+    connection = GoogleConnection(
+        id=uuid4(),
+        user_id=uuid4(),
+        google_account_id="google-id",
+        email="user@example.com",
+        scopes=["drive.readonly"],
+    )
+    session = SelectedFolderSession(connection, [])
+    app.dependency_overrides[get_session] = lambda: session
+
+    try:
+        with TestClient(app) as test_client:
+            test_client.cookies.set("google_connection_id", str(connection.id))
+            response = test_client.put(
+                "/api/v1/drive/folders/selected",
+                json={
+                    "folders": [
+                        {"id": "same", "name": "One"},
+                        {"id": "same", "name": "Two"},
+                    ]
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Selected folders must be unique"}
+    assert session.commits == 0
 
 
 @pytest.mark.parametrize(

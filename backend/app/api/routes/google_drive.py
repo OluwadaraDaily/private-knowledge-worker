@@ -1,14 +1,16 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.google import require_google_connection
 from app.core.config import get_settings
 from app.db.models.google_connection import GoogleConnection
+from app.db.models.indexed_folder import IndexedFolder
 from app.db.session import get_session
 from app.services.folder_hierarchy import GoogleFolderNode, list_google_folder_hierarchy
+from app.services.folder_selection import list_selected_folders, replace_selected_folders
 from app.services.google_connections import list_google_drive_folders
 
 
@@ -27,6 +29,20 @@ class GoogleFolderTreeResponse(BaseModel):
     id: str
     name: str
     children: list["GoogleFolderTreeResponse"] = Field(default_factory=list)
+
+
+class SelectedFolderRequest(BaseModel):
+    id: str = Field(min_length=1, max_length=255)
+    name: str = Field(min_length=1, max_length=1024)
+
+
+class SelectedFoldersRequest(BaseModel):
+    folders: list[SelectedFolderRequest] = Field(default_factory=list, max_length=1000)
+
+
+class SelectedFolderResponse(BaseModel):
+    id: str
+    name: str
 
 
 google_drive_router = APIRouter(prefix="/drive")
@@ -90,3 +106,42 @@ def get_google_drive_folder_tree(
     )
 
     return [_folder_node_response(node) for node in folder_tree]
+
+
+def _selected_folder_response(folder: IndexedFolder) -> SelectedFolderResponse:
+    return SelectedFolderResponse(
+        id=folder.google_folder_id,
+        name=folder.name,
+    )
+
+
+@google_drive_router.get(
+    "/folders/selected",
+    response_model=list[SelectedFolderResponse],
+    summary="List selected Google Drive folders",
+)
+def get_selected_google_drive_folders(
+    session: Annotated[Session, Depends(get_session)],
+    connection: Annotated[GoogleConnection, Depends(require_google_connection)],
+) -> list[SelectedFolderResponse]:
+    return [
+        _selected_folder_response(folder)
+        for folder in list_selected_folders(session, connection.user_id)
+    ]
+
+
+@google_drive_router.put(
+    "/folders/selected",
+    response_model=list[SelectedFolderResponse],
+    summary="Replace selected Google Drive folders",
+)
+def put_selected_google_drive_folders(
+    selection: SelectedFoldersRequest,
+    session: Annotated[Session, Depends(get_session)],
+    connection: Annotated[GoogleConnection, Depends(require_google_connection)],
+) -> list[SelectedFolderResponse]:
+    folder_pairs = [(folder.id, folder.name) for folder in selection.folders]
+    if len(folder_pairs) != len(set(folder_id for folder_id, _name in folder_pairs)):
+        raise HTTPException(status_code=422, detail="Selected folders must be unique")
+    selected_folders = replace_selected_folders(session, connection.user_id, folder_pairs)
+    return [_selected_folder_response(folder) for folder in selected_folders]
