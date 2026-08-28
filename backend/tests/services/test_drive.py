@@ -1,7 +1,6 @@
 import httpx
 import pytest
 
-from app.services import drive as drive_module
 from app.services.drive import (
     GOOGLE_DRIVE_ABOUT_URL,
     GoogleDriveAuthenticationError,
@@ -54,7 +53,7 @@ def test_drive_verification_sends_bearer_token_and_minimal_about_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake_client = FakeClient(FakeResponse(200))
-    monkeypatch.setattr(drive_module.httpx, "Client", lambda timeout: fake_client)
+    monkeypatch.setattr(httpx, "Client", lambda timeout: fake_client)
 
     GoogleDriveClient("access-token").verify_access()
 
@@ -67,7 +66,7 @@ def test_drive_verification_rejects_unauthorized_access(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake_client = FakeClient(FakeResponse(401))
-    monkeypatch.setattr(drive_module.httpx, "Client", lambda timeout: fake_client)
+    monkeypatch.setattr(httpx, "Client", lambda timeout: fake_client)
 
     with pytest.raises(GoogleDriveAuthenticationError, match="rejected"):
         GoogleDriveClient("expired-token").verify_access()
@@ -75,7 +74,7 @@ def test_drive_verification_rejects_unauthorized_access(
 
 def test_drive_verification_wraps_network_failures(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_client = FakeClient()
-    monkeypatch.setattr(drive_module.httpx, "Client", lambda timeout: fake_client)
+    monkeypatch.setattr(httpx, "Client", lambda timeout: fake_client)
 
     with pytest.raises(GoogleDriveError, match="request failed"):
         GoogleDriveClient("access-token").verify_access()
