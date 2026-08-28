@@ -11,7 +11,16 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.db.models.google_connection import GoogleConnection
 from app.db.session import get_session
-from app.services.credentials import GoogleCredentialError, persist_google_credentials
+from app.services.credentials import (
+    GoogleCredentialError,
+    get_valid_google_access_token,
+    persist_google_credentials,
+)
+from app.services.drive import (
+    GoogleDriveAuthenticationError,
+    GoogleDriveError,
+    verify_google_drive_access,
+)
 from app.services.oauth import (
     OAuthExchangeError,
     consume_oauth_state,
@@ -25,6 +34,11 @@ class GoogleConnectionStatus(BaseModel):
     email: str | None = None
     scopes: list[str] = Field(default_factory=list)
     token_expires_at: str | None = None
+
+
+class GoogleDriveVerification(BaseModel):
+    authenticated: bool
+    email: str
 
 
 GOOGLE_CONNECTION_COOKIE = "google_connection_id"
@@ -119,6 +133,48 @@ def get_google_connection_status(
             connection.token_expires_at.isoformat() if connection.token_expires_at else None
         ),
     )
+
+
+@google_auth_router.get(
+    "/verify",
+    response_model=GoogleDriveVerification,
+    summary="Verify authenticated Google Drive access",
+)
+def verify_google_drive(
+    session: Annotated[Session, Depends(get_session)],
+    google_connection_id: str | None = Cookie(default=None),
+) -> GoogleDriveVerification:
+    if not google_connection_id:
+        raise HTTPException(status_code=401, detail="Google account is not connected")
+    try:
+        connection_id = UUID(google_connection_id)
+    except ValueError as error:
+        raise HTTPException(status_code=401, detail="Google account is not connected") from error
+
+    connection = session.scalar(
+        select(GoogleConnection).where(GoogleConnection.id == connection_id)
+    )
+    if connection is None:
+        raise HTTPException(status_code=401, detail="Google account is not connected")
+
+    settings = get_settings()
+    try:
+        access_token = get_valid_google_access_token(session, settings, connection)
+        verify_google_drive_access(access_token)
+    except GoogleDriveAuthenticationError as error:
+        raise HTTPException(
+            status_code=401,
+            detail="Google authentication is no longer valid; reconnect Google",
+        ) from error
+    except GoogleCredentialError as error:
+        raise HTTPException(
+            status_code=401,
+            detail="Google authentication is unavailable; reconnect Google",
+        ) from error
+    except GoogleDriveError as error:
+        raise HTTPException(status_code=502, detail="Google Drive verification failed") from error
+
+    return GoogleDriveVerification(authenticated=True, email=connection.email)
 
 
 @google_auth_router.delete("", status_code=204, summary="Disconnect Google")

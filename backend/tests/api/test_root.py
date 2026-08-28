@@ -9,6 +9,7 @@ from app.core.config import Settings
 from app.db.models.google_connection import GoogleConnection
 from app.db.session import get_session
 from app.main import create_app
+from app.services.drive import GoogleDriveAuthenticationError, GoogleDriveError
 
 
 class ConnectionSession:
@@ -111,6 +112,131 @@ def test_google_status_returns_non_secret_connection_metadata() -> None:
     }
     assert "encrypted-access-token" not in response.text
     assert "encrypted-refresh-token" not in response.text
+
+
+def test_google_drive_verify_makes_authenticated_request_for_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = create_app()
+    connection = GoogleConnection(
+        id=uuid4(),
+        user_id=uuid4(),
+        google_account_id="google-id",
+        email="user@example.com",
+        scopes=["drive.readonly"],
+    )
+    session = ConnectionSession(connection)
+    app.dependency_overrides[get_session] = lambda: session
+    access_tokens: list[str] = []
+    monkeypatch.setattr(
+        google_auth_module,
+        "get_valid_google_access_token",
+        lambda *_args: "access-token",
+    )
+    monkeypatch.setattr(
+        google_auth_module,
+        "verify_google_drive_access",
+        lambda access_token: access_tokens.append(access_token),
+    )
+
+    try:
+        with TestClient(app) as test_client:
+            test_client.cookies.set("google_connection_id", str(connection.id))
+            response = test_client.get("/api/v1/auth/google/verify")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {"authenticated": True, "email": "user@example.com"}
+    assert access_tokens == ["access-token"]
+
+
+def test_google_drive_verify_requires_a_connection() -> None:
+    app = create_app()
+    app.dependency_overrides[get_session] = lambda: ConnectionSession(None)
+    try:
+        with TestClient(app) as test_client:
+            response = test_client.get("/api/v1/auth/google/verify")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Google account is not connected"}
+
+
+def test_google_drive_verify_reports_invalid_google_authentication(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = create_app()
+    connection = GoogleConnection(
+        id=uuid4(),
+        user_id=uuid4(),
+        google_account_id="google-id",
+        email="user@example.com",
+        scopes=["drive.readonly"],
+    )
+    app.dependency_overrides[get_session] = lambda: ConnectionSession(connection)
+    monkeypatch.setattr(
+        google_auth_module,
+        "get_valid_google_access_token",
+        lambda *_args: "access-token",
+    )
+    monkeypatch.setattr(
+        google_auth_module,
+        "verify_google_drive_access",
+        lambda _access_token: (_ for _ in ()).throw(
+            GoogleDriveAuthenticationError("provider rejected token")
+        ),
+    )
+
+    try:
+        with TestClient(app) as test_client:
+            test_client.cookies.set("google_connection_id", str(connection.id))
+            response = test_client.get("/api/v1/auth/google/verify")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "detail": "Google authentication is no longer valid; reconnect Google"
+    }
+
+
+def test_google_drive_verify_hides_upstream_failure_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = create_app()
+    connection = GoogleConnection(
+        id=uuid4(),
+        user_id=uuid4(),
+        google_account_id="google-id",
+        email="user@example.com",
+        scopes=["drive.readonly"],
+    )
+    app.dependency_overrides[get_session] = lambda: ConnectionSession(connection)
+    monkeypatch.setattr(
+        google_auth_module,
+        "get_valid_google_access_token",
+        lambda *_args: "access-token",
+    )
+    monkeypatch.setattr(
+        google_auth_module,
+        "verify_google_drive_access",
+        lambda _access_token: (_ for _ in ()).throw(
+            GoogleDriveError("provider body contains a secret")
+        ),
+    )
+
+    try:
+        with TestClient(app) as test_client:
+            test_client.cookies.set("google_connection_id", str(connection.id))
+            response = test_client.get("/api/v1/auth/google/verify")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 502
+    assert response.json() == {"detail": "Google Drive verification failed"}
+    assert "provider body contains a secret" not in response.text
 
 
 def test_google_disconnect_clears_cookie_and_commits() -> None:
