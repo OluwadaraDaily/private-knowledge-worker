@@ -31,6 +31,7 @@ class GoogleDriveFile:
     created_at: datetime | None
     modified_at: datetime | None
     web_url: str | None
+    version: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

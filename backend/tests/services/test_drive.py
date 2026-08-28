@@ -284,6 +284,7 @@ def test_drive_document_listing_returns_metadata_and_excludes_unowned_docs(
                         "trashed": False,
                         "createdTime": "2026-08-28T10:00:00Z",
                         "modifiedTime": "2026-08-28T11:00:00Z",
+                        "version": "42",
                         "webViewLink": "https://docs.google.com/document/d/doc-1/edit",
                     },
                     {
@@ -340,6 +341,7 @@ def test_drive_document_listing_returns_metadata_and_excludes_unowned_docs(
                 created_at=datetime.fromisoformat("2026-08-28T10:00:00+00:00"),
                 modified_at=datetime.fromisoformat("2026-08-28T11:00:00+00:00"),
                 web_url="https://docs.google.com/document/d/doc-1/edit",
+                version="42",
             ),
         ),
         next_page_token="next-page",

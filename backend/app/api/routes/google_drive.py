@@ -62,6 +62,7 @@ class GoogleDocumentResponse(BaseModel):
     parents: list[str]
     created_at: datetime | None
     modified_at: datetime | None
+    version: str | None
     web_url: str | None
 
 
@@ -209,6 +210,7 @@ def discover_google_drive_documents(
             parents=list(document.parents),
             created_at=document.created_at,
             modified_at=document.modified_at,
+            version=document.version,
             web_url=document.web_url,
         )
         for document in documents

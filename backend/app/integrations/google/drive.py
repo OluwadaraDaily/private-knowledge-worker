@@ -18,7 +18,7 @@ GOOGLE_DOC_MIME_TYPE = "application/vnd.google-apps.document"
 GOOGLE_DRIVE_DOCUMENT_QUERY = f"mimeType = '{GOOGLE_DOC_MIME_TYPE}' and trashed = false"
 GOOGLE_DRIVE_DOCUMENT_FIELDS = (
     "nextPageToken,files(id,name,mimeType,parents,ownedByMe,trashed,"
-    "shared,createdTime,modifiedTime,webViewLink)"
+    "shared,createdTime,modifiedTime,version,webViewLink)"
 )
 
 
@@ -195,6 +195,11 @@ def _parse_document_page(payload: object) -> GoogleDriveFilePage:
             raise GoogleApiError(
                 "Google Drive returned invalid document metadata", kind="malformed"
             )
+        version = raw_file.get("version")
+        if version is not None and not isinstance(version, str):
+            raise GoogleApiError(
+                "Google Drive returned invalid document metadata", kind="malformed"
+            )
         files.append(
             GoogleDriveFile(
                 id=file_id,
@@ -204,6 +209,7 @@ def _parse_document_page(payload: object) -> GoogleDriveFilePage:
                 created_at=created_at,
                 modified_at=modified_at,
                 web_url=web_url,
+                version=version,
             )
         )
 
