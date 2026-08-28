@@ -1,10 +1,14 @@
 from typing import cast
 from uuid import uuid4
 
+import pytest
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings
+from app.db.models.google_connection import GoogleConnection
 from app.db.models.indexed_folder import IndexedFolder
-from app.integrations.google.interfaces import GoogleDriveFolder
+from app.integrations.google.interfaces import GoogleDriveFile, GoogleDriveFolder
+from app.services import document_discovery as document_discovery_module
 from app.services.folder_selection import (
     FolderSelectionValidationError,
     list_selected_folders,
@@ -103,3 +107,55 @@ def test_validate_selected_folders_rejects_duplicate_and_ancestor_selections() -
             assert str(error) == message
         else:
             raise AssertionError("Expected invalid folder selection to fail")
+
+
+def test_discover_selected_docs_follows_nested_folder_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = uuid4()
+    connection = GoogleConnection(
+        user_id=user_id,
+        google_account_id="account",
+        email="user@example.com",
+    )
+    monkeypatch.setattr(
+        document_discovery_module,
+        "list_all_google_drive_folders",
+        lambda *_args: (
+            GoogleDriveFolder(id="root", name="Root", parents=()),
+            GoogleDriveFolder(id="nested", name="Nested", parents=("root",)),
+        ),
+    )
+    monkeypatch.setattr(
+        document_discovery_module,
+        "list_all_google_drive_documents",
+        lambda *_args: (
+            GoogleDriveFile(
+                id="in-scope",
+                name="In scope",
+                mime_type="application/vnd.google-apps.document",
+                parents=("nested",),
+                created_at=None,
+                modified_at=None,
+                web_url=None,
+            ),
+            GoogleDriveFile(
+                id="out-of-scope",
+                name="Out of scope",
+                mime_type="application/vnd.google-apps.document",
+                parents=("other",),
+                created_at=None,
+                modified_at=None,
+                web_url=None,
+            ),
+        ),
+    )
+
+    discovered = document_discovery_module.discover_selected_google_docs(
+        cast(Session, SelectionSession([])),
+        Settings(),
+        connection,
+        {"root"},
+    )
+
+    assert [document.id for document in discovered] == ["in-scope"]

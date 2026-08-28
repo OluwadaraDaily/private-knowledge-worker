@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 
 import httpx
 import pytest
@@ -6,12 +7,19 @@ import pytest
 from app.integrations.google.client import GoogleApiError
 from app.integrations.google.drive import (
     GOOGLE_DRIVE_ABOUT_URL,
+    GOOGLE_DRIVE_DOCUMENT_FIELDS,
+    GOOGLE_DRIVE_DOCUMENT_QUERY,
     GOOGLE_DRIVE_FILES_URL,
     GOOGLE_DRIVE_FOLDER_FIELDS,
     GOOGLE_DRIVE_FOLDER_QUERY,
     GoogleDriveClient,
 )
-from app.integrations.google.interfaces import GoogleDriveFolder, GoogleDriveFolderPage
+from app.integrations.google.interfaces import (
+    GoogleDriveFile,
+    GoogleDriveFilePage,
+    GoogleDriveFolder,
+    GoogleDriveFolderPage,
+)
 
 
 class FakeResponse:
@@ -256,3 +264,67 @@ def test_drive_folder_listing_excludes_unowned_and_trashed_folders(
     page = GoogleDriveClient().list_folders("access-token")
 
     assert [folder.id for folder in page.folders] == ["owned-folder"]
+
+
+def test_drive_document_listing_returns_metadata_and_excludes_unowned_docs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_client = FakeClient(
+        FakeResponse(
+            200,
+            {
+                "nextPageToken": "next-page",
+                "files": [
+                    {
+                        "id": "doc-1",
+                        "name": "Research notes",
+                        "mimeType": "application/vnd.google-apps.document",
+                        "parents": ["folder-1"],
+                        "ownedByMe": True,
+                        "trashed": False,
+                        "createdTime": "2026-08-28T10:00:00Z",
+                        "modifiedTime": "2026-08-28T11:00:00Z",
+                        "webViewLink": "https://docs.google.com/document/d/doc-1/edit",
+                    },
+                    {
+                        "id": "shared-doc",
+                        "name": "Shared",
+                        "mimeType": "application/vnd.google-apps.document",
+                        "ownedByMe": False,
+                        "trashed": False,
+                    },
+                ],
+            },
+        )
+    )
+    monkeypatch.setattr(httpx, "Client", lambda timeout: fake_client)
+
+    page = GoogleDriveClient().list_documents(
+        "access-token",
+        page_token="previous-page",
+        page_size=25,
+    )
+
+    assert fake_client.params == {
+        "corpora": "user",
+        "fields": GOOGLE_DRIVE_DOCUMENT_FIELDS,
+        "pageSize": "25",
+        "q": GOOGLE_DRIVE_DOCUMENT_QUERY,
+        "spaces": "drive",
+        "orderBy": "modifiedTime desc, name",
+        "pageToken": "previous-page",
+    }
+    assert page == GoogleDriveFilePage(
+        files=(
+            GoogleDriveFile(
+                id="doc-1",
+                name="Research notes",
+                mime_type="application/vnd.google-apps.document",
+                parents=("folder-1",),
+                created_at=datetime.fromisoformat("2026-08-28T10:00:00+00:00"),
+                modified_at=datetime.fromisoformat("2026-08-28T11:00:00+00:00"),
+                web_url="https://docs.google.com/document/d/doc-1/edit",
+            ),
+        ),
+        next_page_token="next-page",
+    )

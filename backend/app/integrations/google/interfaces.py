@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
 
 
@@ -16,6 +17,27 @@ class GoogleDriveFolderPage:
     """One page of normalized Google Drive folders."""
 
     folders: tuple[GoogleDriveFolder, ...]
+    next_page_token: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class GoogleDriveFile:
+    """Normalized Google Drive file metadata."""
+
+    id: str
+    name: str
+    mime_type: str
+    parents: tuple[str, ...]
+    created_at: datetime | None
+    modified_at: datetime | None
+    web_url: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class GoogleDriveFilePage:
+    """One page of normalized Google Drive file metadata."""
+
+    files: tuple[GoogleDriveFile, ...]
     next_page_token: str | None
 
 
@@ -39,5 +61,23 @@ class GoogleDriveFolderLister(Protocol):
         """Return one page of owned, non-trashed folders."""
 
 
-class GoogleDriveGateway(GoogleDriveVerifier, GoogleDriveFolderLister, Protocol):
+class GoogleDriveFileLister(Protocol):
+    """Application-facing Google Docs metadata contract."""
+
+    def list_documents(
+        self,
+        access_token: str,
+        *,
+        page_token: str | None = None,
+        page_size: int = 100,
+    ) -> GoogleDriveFilePage:
+        """Return one page of owned Google Docs metadata."""
+
+
+class GoogleDriveGateway(
+    GoogleDriveVerifier,
+    GoogleDriveFolderLister,
+    GoogleDriveFileLister,
+    Protocol,
+):
     """Combined Google Drive client contract."""

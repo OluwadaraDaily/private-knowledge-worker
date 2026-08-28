@@ -9,6 +9,9 @@ from app.db.models.google_connection import GoogleConnection
 from app.integrations.google.client import GoogleApiError
 from app.integrations.google.drive import GoogleDriveClient
 from app.integrations.google.interfaces import (
+    GoogleDriveFile,
+    GoogleDriveFileLister,
+    GoogleDriveFilePage,
     GoogleDriveFolder,
     GoogleDriveFolderLister,
     GoogleDriveFolderPage,
@@ -109,6 +112,38 @@ def list_all_google_drive_folders(
             )
         seen_page_tokens.add(next_page_token)
         page_token = next_page_token
+
+
+def list_all_google_drive_documents(
+    session: Session,
+    settings: Settings,
+    connection: GoogleConnection,
+    *,
+    page_size: int = 100,
+    drive_client: GoogleDriveFileLister | None = None,
+) -> tuple[GoogleDriveFile, ...]:
+    """Fetch every page of owned Google Docs metadata."""
+    client = drive_client if drive_client is not None else GoogleDriveClient()
+    files: list[GoogleDriveFile] = []
+    page_token: str | None = None
+    seen_page_tokens: set[str] = set()
+    while True:
+        page: GoogleDriveFilePage = _run_with_google_access_token(
+            session,
+            settings,
+            connection,
+            partial(client.list_documents, page_token=page_token, page_size=page_size),
+        )
+        files.extend(page.files)
+        if page.next_page_token is None:
+            return tuple(files)
+        if page.next_page_token in seen_page_tokens:
+            raise GoogleApiError(
+                "Google Drive returned a non-advancing document page token",
+                kind="malformed",
+            )
+        seen_page_tokens.add(page.next_page_token)
+        page_token = page.next_page_token
 
 
 def disconnect_google_connection(session: Session, connection: GoogleConnection) -> None:

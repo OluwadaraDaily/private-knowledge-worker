@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -9,6 +10,7 @@ from app.core.config import get_settings
 from app.db.models.google_connection import GoogleConnection
 from app.db.models.indexed_folder import IndexedFolder
 from app.db.session import get_session
+from app.services.document_discovery import discover_selected_google_docs
 from app.services.folder_hierarchy import GoogleFolderNode, list_google_folder_hierarchy
 from app.services.folder_selection import (
     FolderSelectionValidationError,
@@ -16,7 +18,10 @@ from app.services.folder_selection import (
     replace_selected_folders,
     validate_selected_folders,
 )
-from app.services.google_connections import list_all_google_drive_folders, list_google_drive_folders
+from app.services.google_connections import (
+    list_all_google_drive_folders,
+    list_google_drive_folders,
+)
 
 
 class GoogleFolderResponse(BaseModel):
@@ -48,6 +53,16 @@ class SelectedFoldersRequest(BaseModel):
 class SelectedFolderResponse(BaseModel):
     id: str
     name: str
+
+
+class GoogleDocumentResponse(BaseModel):
+    id: str
+    title: str
+    mime_type: str
+    parents: list[str]
+    created_at: datetime | None
+    modified_at: datetime | None
+    web_url: str | None
 
 
 google_drive_router = APIRouter(prefix="/drive")
@@ -166,3 +181,35 @@ def put_selected_google_drive_folders(
         validated_folders,
     )
     return [_selected_folder_response(folder) for folder in selected_folders]
+
+
+@google_drive_router.get(
+    "/documents/discover",
+    response_model=list[GoogleDocumentResponse],
+    summary="Discover eligible Google Docs in selected folders",
+)
+def discover_google_drive_documents(
+    session: Annotated[Session, Depends(get_session)],
+    connection: Annotated[GoogleConnection, Depends(require_google_connection)],
+) -> list[GoogleDocumentResponse]:
+    selected_folder_ids = {
+        folder.google_folder_id for folder in list_selected_folders(session, connection.user_id)
+    }
+    documents = discover_selected_google_docs(
+        session,
+        get_settings(),
+        connection,
+        selected_folder_ids,
+    )
+    return [
+        GoogleDocumentResponse(
+            id=document.id,
+            title=document.name,
+            mime_type=document.mime_type,
+            parents=list(document.parents),
+            created_at=document.created_at,
+            modified_at=document.modified_at,
+            web_url=document.web_url,
+        )
+        for document in documents
+    ]
