@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import cast
 from urllib.parse import parse_qs, urlparse
 
@@ -36,6 +36,14 @@ class FakeSession:
         return object()
 
 
+class ExpiringStateSession(FakeSession):
+    def execute(self, statement: object) -> object:
+        del statement
+        now = datetime.now(UTC)
+        self.records = [record for record in self.records if record.expires_at > now]
+        return object()
+
+
 def test_create_oauth_authorization_url_stores_hashed_expiring_state() -> None:
     session = FakeSession()
     settings = Settings(
@@ -52,9 +60,7 @@ def test_create_oauth_authorization_url_stores_hashed_expiring_state() -> None:
     assert parsed.scheme == "https"
     assert parsed.netloc == "accounts.google.com"
     assert query["client_id"] == ["client-id"]
-    assert query["redirect_uri"] == [
-        "http://127.0.0.1:8000/api/v1/auth/google/callback"
-    ]
+    assert query["redirect_uri"] == ["http://127.0.0.1:8000/api/v1/auth/google/callback"]
     assert query["response_type"] == ["code"]
     assert set(query["scope"][0].split()) == set(settings.oauth_scopes)
     assert raw_state
@@ -69,6 +75,24 @@ def test_create_oauth_authorization_url_requires_client_id() -> None:
 
     with pytest.raises(ValueError, match="OAuth client ID is not configured"):
         create_oauth_authorization_url(cast(Session, FakeSession()), settings)
+
+
+def test_create_oauth_authorization_url_deletes_expired_states() -> None:
+    now = datetime.now(UTC)
+    session = ExpiringStateSession()
+    session.records = [
+        OAuthState(state_hash="expired-state", expires_at=now - timedelta(seconds=1)),
+        OAuthState(state_hash="valid-state", expires_at=now + timedelta(minutes=1)),
+    ]
+    settings = Settings(oauth_client_id="client-id")
+
+    create_oauth_authorization_url(cast(Session, session), settings)
+
+    state_hashes = {record.state_hash for record in session.records}
+    assert "expired-state" not in state_hashes
+    assert "valid-state" in state_hashes
+    assert len(session.records) == 2
+    assert session.commits == 1
 
 
 def test_consume_oauth_state_is_one_time() -> None:
@@ -98,7 +122,5 @@ def test_start_google_oauth_redirects_to_google(monkeypatch: pytest.MonkeyPatch)
     application.dependency_overrides.clear()
 
     assert response.status_code == 307
-    assert response.headers["location"].startswith(
-        "https://accounts.google.com/o/oauth2/v2/auth?"
-    )
+    assert response.headers["location"].startswith("https://accounts.google.com/o/oauth2/v2/auth?")
     assert session.commits == 1

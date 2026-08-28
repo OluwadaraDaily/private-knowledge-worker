@@ -60,9 +60,7 @@ class GoogleOAuthClient:
                 response.raise_for_status()
                 user_info = response.json()
         except (httpx.HTTPError, ValueError) as error:
-            raise OAuthExchangeError(
-                "Google account information could not be retrieved"
-            ) from error
+            raise OAuthExchangeError("Google account information could not be retrieved") from error
         if not isinstance(user_info, dict):
             raise OAuthExchangeError("Google returned invalid account information")
         return user_info
@@ -82,9 +80,7 @@ class GoogleOAuthClient:
                 token_data = response.json()
         except (httpx.HTTPError, ValueError) as error:
             raise OAuthExchangeError(failure_message) from error
-        if not isinstance(token_data, dict) or not isinstance(
-            token_data.get("access_token"), str
-        ):
+        if not isinstance(token_data, dict) or not isinstance(token_data.get("access_token"), str):
             raise OAuthExchangeError("Google returned an invalid token response")
         return token_data
 
@@ -92,14 +88,13 @@ class GoogleOAuthClient:
         return f"{str(self.settings.backend_url).rstrip('/')}/api/v1/auth/google/callback"
 
 
-def create_oauth_authorization_url(
-    session: Session, settings: Settings
-) -> OAuthAuthorization:
+def create_oauth_authorization_url(session: Session, settings: Settings) -> OAuthAuthorization:
     if not settings.oauth_client_id:
         raise ValueError("OAuth client ID is not configured")
 
     raw_state = secrets.token_urlsafe(32)
     now = datetime.now(UTC)
+    session.execute(delete(OAuthState).where(OAuthState.expires_at <= now))
     session.add(
         OAuthState(
             state_hash=hashlib.sha256(raw_state.encode()).hexdigest(),
