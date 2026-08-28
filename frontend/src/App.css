@@ -1172,6 +1172,23 @@ p {
   line-height: 1;
 }
 
+.selection-save-button {
+  margin-top: 1.4rem;
+}
+
+.selection-save-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.selection-summary-error {
+  margin: 1rem 0 0;
+  color: var(--coral-deep);
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  line-height: 1.5;
+}
+
 .selection-empty {
   display: flex;
   align-items: flex-start;

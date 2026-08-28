@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 
 import { LogoMark } from '../components/LogoMark'
@@ -14,6 +14,11 @@ type FolderMeta = {
   node: FolderNode
   parentId: string | null
   path: string[]
+}
+
+type SelectedFolder = {
+  id: string
+  name: string
 }
 
 const API_BASE =
@@ -36,6 +41,33 @@ async function requestFolderTree() {
   return (await response.json()) as FolderNode[]
 }
 
+async function requestSelectedFolders() {
+  const response = await fetch(API_BASE + '/drive/folders/selected', {
+    credentials: 'include',
+  })
+
+  if (!response.ok) {
+    throw new Error('We could not load your saved folders.')
+  }
+
+  return (await response.json()) as SelectedFolder[]
+}
+
+async function saveSelectedFolders(folders: SelectedFolder[]) {
+  const response = await fetch(API_BASE + '/drive/folders/selected', {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ folders }),
+  })
+
+  if (!response.ok) {
+    throw new Error('We could not save your folders.')
+  }
+
+  return (await response.json()) as SelectedFolder[]
+}
+
 function getFolderLoadError(error: unknown) {
   return error instanceof Error && error.message === RECONNECT_ERROR
     ? RECONNECT_ERROR
@@ -43,7 +75,9 @@ function getFolderLoadError(error: unknown) {
 }
 
 export function FolderSelectionPage() {
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
+  const [localSelectedIds, setLocalSelectedIds] = useState<Set<string> | null>(
+    null,
+  )
   const folderTreeQuery = useQuery<FolderNode[], Error>({
     queryKey: ['google-drive', 'folders', 'tree'],
     queryFn: requestFolderTree,
@@ -53,7 +87,26 @@ export function FolderSelectionPage() {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   })
+  const selectedFoldersQuery = useQuery<SelectedFolder[], Error>({
+    queryKey: ['google-drive', 'folders', 'selected'],
+    queryFn: requestSelectedFolders,
+    enabled: folderTreeQuery.isSuccess,
+    staleTime: Infinity,
+    gcTime: 30 * 60 * 1000,
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  })
+  const saveSelectionMutation = useMutation({
+    mutationFn: saveSelectedFolders,
+    onSuccess: (savedFolders) => {
+      setLocalSelectedIds(new Set(savedFolders.map((folder) => folder.id)))
+    },
+  })
   const folders = folderTreeQuery.data ?? null
+  const selectedIds =
+    localSelectedIds ??
+    new Set(selectedFoldersQuery.data?.map((folder) => folder.id))
   const error = folderTreeQuery.error
     ? getFolderLoadError(folderTreeQuery.error)
     : null
@@ -100,15 +153,18 @@ export function FolderSelectionPage() {
       return
     }
 
-    setSelectedIds((currentSelectedIds) => {
-      const nextSelectedIds = new Set(currentSelectedIds)
+    setLocalSelectedIds((currentSelectedIds) => {
+      const currentIds =
+        currentSelectedIds ??
+        new Set(selectedFoldersQuery.data?.map((folder) => folder.id))
+      const nextSelectedIds = new Set(currentIds)
 
       if (nextSelectedIds.has(folderId)) {
         nextSelectedIds.delete(folderId)
         return nextSelectedIds
       }
 
-      for (const selectedId of currentSelectedIds) {
+      for (const selectedId of currentIds) {
         let parentId = folderMetadata.get(selectedId)?.parentId ?? null
         while (parentId) {
           if (parentId === folderId) {
@@ -132,6 +188,25 @@ export function FolderSelectionPage() {
     )
 
   const hasFolders = folders !== null && folders.length > 0
+  const selectionKey = getSelectionKey([...selectedIds])
+  const savedSelectionKey = saveSelectionMutation.data
+    ? getSelectionKey(saveSelectionMutation.data.map((folder) => folder.id))
+    : selectedFoldersQuery.data
+      ? getSelectionKey(selectedFoldersQuery.data.map((folder) => folder.id))
+      : selectedFoldersQuery.isError
+        ? ''
+        : null
+  const hasUnsavedSelection =
+    savedSelectionKey !== null && selectionKey !== savedSelectionKey
+
+  function saveSelection() {
+    const foldersToSave = [...selectedIds]
+      .map((id) => folderMetadata.get(id)?.node)
+      .filter((folder): folder is FolderNode => folder !== undefined)
+      .map((folder) => ({ id: folder.id, name: folder.name }))
+
+    saveSelectionMutation.mutate(foldersToSave)
+  }
 
   return (
     <div className="setup-shell folder-selection-shell">
@@ -308,6 +383,36 @@ export function FolderSelectionPage() {
                 </p>
               </div>
             )}
+            {selectedFoldersQuery.error && (
+              <p className="selection-summary-error" role="alert">
+                We could not load your saved folders. Your current selection is
+                not saved.
+              </p>
+            )}
+            {saveSelectionMutation.error && (
+              <p className="selection-summary-error" role="alert">
+                We could not save your folders. Try again.
+              </p>
+            )}
+            <button
+              className="button button-dark selection-save-button"
+              type="button"
+              onClick={saveSelection}
+              disabled={
+                selectedFoldersQuery.isPending ||
+                saveSelectionMutation.isPending ||
+                !hasUnsavedSelection
+              }
+            >
+              <span>
+                {saveSelectionMutation.isPending
+                  ? 'Saving selection…'
+                  : 'Save selection'}
+              </span>
+              <span className="button-arrow" aria-hidden="true">
+                →
+              </span>
+            </button>
             <div className="selection-summary-note">
               <span className="lock-icon" aria-hidden="true" />
               <p>Only your owned Google Drive folders are shown.</p>
@@ -317,6 +422,10 @@ export function FolderSelectionPage() {
       </main>
     </div>
   )
+}
+
+function getSelectionKey(ids: string[]) {
+  return [...ids].sort().join('|')
 }
 
 type FolderTreeNodeProps = {

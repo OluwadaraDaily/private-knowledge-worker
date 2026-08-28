@@ -28,6 +28,15 @@ const folderTree = [
   },
 ]
 
+function mockFolderRequests() {
+  return vi.fn().mockImplementation((input: RequestInfo | URL) =>
+    Promise.resolve({
+      ok: true,
+      json: async () => (String(input).endsWith('/selected') ? [] : folderTree),
+    }),
+  )
+}
+
 describe('FolderSelectionPage', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -44,13 +53,7 @@ describe('FolderSelectionPage', () => {
   }
 
   it('loads the owned hierarchy and selects a folder with its descendants', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => folderTree,
-      }),
-    )
+    vi.stubGlobal('fetch', mockFolderRequests())
     await renderFoldersPage()
 
     expect(
@@ -73,13 +76,7 @@ describe('FolderSelectionPage', () => {
   })
 
   it('replaces selected descendants when their parent is selected', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => folderTree,
-      }),
-    )
+    vi.stubGlobal('fetch', mockFolderRequests())
     await renderFoldersPage()
 
     await screen.findByRole('checkbox', { name: 'Interviews' })
@@ -98,10 +95,13 @@ describe('FolderSelectionPage', () => {
     const fetchMock = vi
       .fn()
       .mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => folderTree,
-      })
+      .mockImplementation((input: RequestInfo | URL) =>
+        Promise.resolve({
+          ok: true,
+          json: async () =>
+            String(input).endsWith('/selected') ? [] : folderTree,
+        }),
+      )
     vi.stubGlobal('fetch', fetchMock)
     await renderFoldersPage()
 
@@ -116,14 +116,11 @@ describe('FolderSelectionPage', () => {
         screen.getByRole('checkbox', { name: 'Projects' }),
       ).toBeInTheDocument(),
     )
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
   it('reuses the cached hierarchy when returning to the route', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => folderTree,
-    })
+    const fetchMock = mockFolderRequests()
     vi.stubGlobal('fetch', fetchMock)
     const appRouter = await renderFoldersPage()
 
@@ -136,20 +133,90 @@ describe('FolderSelectionPage', () => {
     expect(
       await screen.findByRole('checkbox', { name: 'Projects' }),
     ).toBeInTheDocument()
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('refetches the hierarchy only when manually requested', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => folderTree,
-    })
+    const fetchMock = mockFolderRequests()
     vi.stubGlobal('fetch', fetchMock)
     await renderFoldersPage()
 
     await screen.findByRole('checkbox', { name: 'Projects' })
     fireEvent.click(screen.getByRole('button', { name: 'refresh' }))
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
+  })
+
+  it('reloads saved folders and persists a changed selection', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === 'PUT') {
+          return Promise.resolve({
+            ok: true,
+            json: async () => [
+              { id: 'projects', name: 'Projects' },
+              { id: 'research', name: 'Research' },
+            ],
+          })
+        }
+
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            String(input).endsWith('/selected')
+              ? [{ id: 'projects', name: 'Projects' }]
+              : folderTree,
+        })
+      })
+    vi.stubGlobal('fetch', fetchMock)
+    await renderFoldersPage()
+
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: 'Projects' })).toBeChecked(),
+    )
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Research' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save selection' }))
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/drive/folders/selected'),
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({
+            folders: [
+              { id: 'projects', name: 'Projects' },
+              { id: 'research', name: 'Research' },
+            ],
+          }),
+        }),
+      ),
+    )
+    expect(
+      screen.getByRole('button', { name: 'Save selection' }),
+    ).toBeDisabled()
+  })
+
+  it('keeps the changed selection and shows an error when saving fails', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation((input: RequestInfo | URL, init?: RequestInit) =>
+        Promise.resolve({
+          ok: init?.method !== 'PUT',
+          json: async () =>
+            String(input).endsWith('/selected') ? [] : folderTree,
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+    await renderFoldersPage()
+
+    await screen.findByRole('checkbox', { name: 'Projects' })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Projects' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save selection' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'We could not save your folders. Try again.',
+    )
+    expect(screen.getByRole('checkbox', { name: 'Projects' })).toBeChecked()
   })
 })
