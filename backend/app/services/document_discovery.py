@@ -4,8 +4,9 @@ from app.core.config import Settings
 from app.db.models.google_connection import GoogleConnection
 from app.integrations.google.interfaces import GoogleDriveFile
 from app.services.google_connections import (
-    list_all_google_drive_documents,
+    GoogleDriveDocumentsResult,
     list_all_google_drive_folders,
+    list_google_drive_documents_with_status,
 )
 
 
@@ -14,14 +15,15 @@ def discover_selected_google_docs(
     settings: Settings,
     connection: GoogleConnection,
     selected_folder_ids: set[str],
-) -> tuple[GoogleDriveFile, ...]:
+) -> GoogleDriveDocumentsResult:
     """Discover owned Google Docs inside selected folder trees without fetching content."""
     if not selected_folder_ids:
-        return ()
+        return GoogleDriveDocumentsResult((), complete=True)
 
     folders = list_all_google_drive_folders(session, settings, connection)
     folder_parents = {folder.id: folder.parents for folder in folders}
-    documents = list_all_google_drive_documents(session, settings, connection)
+    discovery_result = list_google_drive_documents_with_status(session, settings, connection)
+    documents = discovery_result.files
 
     def is_in_scope(document: GoogleDriveFile) -> bool:
         pending = list(document.parents)
@@ -36,9 +38,13 @@ def discover_selected_google_docs(
             pending.extend(folder_parents.get(folder_id, ()))
         return False
 
-    return tuple(
-        sorted(
-            (document for document in documents if is_in_scope(document)),
-            key=lambda document: (document.name.casefold(), document.id),
-        )
+    return GoogleDriveDocumentsResult(
+        tuple(
+            sorted(
+                (document for document in documents if is_in_scope(document)),
+                key=lambda document: (document.name.casefold(), document.id),
+            )
+        ),
+        complete=discovery_result.complete,
+        warning=discovery_result.warning,
     )

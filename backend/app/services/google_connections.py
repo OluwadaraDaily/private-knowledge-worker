@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from dataclasses import dataclass
 from functools import partial
 
 from sqlalchemy import delete
@@ -18,6 +19,15 @@ from app.integrations.google.interfaces import (
     GoogleDriveVerifier,
 )
 from app.services.credentials import get_valid_google_access_token, refresh_google_access_token
+
+
+@dataclass(frozen=True, slots=True)
+class GoogleDriveDocumentsResult:
+    """Documents discovered before a possible later-page failure."""
+
+    files: tuple[GoogleDriveFile, ...]
+    complete: bool
+    warning: str | None = None
 
 
 def _run_with_google_access_token[ResultT](
@@ -148,6 +158,51 @@ def list_all_google_drive_documents(
             )
         seen_page_tokens.add(page.next_page_token)
         page_token = page.next_page_token
+
+
+def list_google_drive_documents_with_status(
+    session: Session,
+    settings: Settings,
+    connection: GoogleConnection,
+    *,
+    page_size: int = 100,
+    drive_client: GoogleDriveFileLister | None = None,
+) -> GoogleDriveDocumentsResult:
+    """Return discovered Docs and explicitly report failures after a partial result."""
+    client = drive_client if drive_client is not None else GoogleDriveClient()
+    files: list[GoogleDriveFile] = []
+    seen_file_ids: set[str] = set()
+    page_token: str | None = None
+    seen_page_tokens: set[str] = set()
+    try:
+        while True:
+            page: GoogleDriveFilePage = _run_with_google_access_token(
+                session,
+                settings,
+                connection,
+                partial(client.list_documents, page_token=page_token, page_size=page_size),
+            )
+            for file in page.files:
+                if file.id not in seen_file_ids:
+                    seen_file_ids.add(file.id)
+                    files.append(file)
+            if page.next_page_token is None:
+                return GoogleDriveDocumentsResult(tuple(files), complete=True)
+            if page.next_page_token in seen_page_tokens:
+                raise GoogleApiError(
+                    "Google Drive returned a non-advancing document page token",
+                    kind="malformed",
+                )
+            seen_page_tokens.add(page.next_page_token)
+            page_token = page.next_page_token
+    except GoogleApiError as error:
+        if not files or error.kind == "authentication":
+            raise
+        return GoogleDriveDocumentsResult(
+            tuple(files),
+            complete=False,
+            warning="Document discovery stopped before every page could be loaded",
+        )
 
 
 def disconnect_google_connection(session: Session, connection: GoogleConnection) -> None:

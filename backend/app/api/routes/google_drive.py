@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -192,16 +192,22 @@ def put_selected_google_drive_folders(
 def discover_google_drive_documents(
     session: Annotated[Session, Depends(get_session)],
     connection: Annotated[GoogleConnection, Depends(require_google_connection)],
+    response: Response,
 ) -> list[GoogleDocumentResponse]:
     selected_folder_ids = {
         folder.google_folder_id for folder in list_selected_folders(session, connection.user_id)
     }
-    documents = discover_selected_google_docs(
+    discovery_result = discover_selected_google_docs(
         session,
         get_settings(),
         connection,
         selected_folder_ids,
     )
+    if not discovery_result.complete:
+        response.status_code = 206
+        response.headers["X-Discovery-Partial"] = "true"
+        if discovery_result.warning:
+            response.headers["X-Discovery-Warning"] = discovery_result.warning
     return [
         GoogleDocumentResponse(
             id=document.id,
@@ -213,5 +219,5 @@ def discover_google_drive_documents(
             version=document.version,
             web_url=document.web_url,
         )
-        for document in documents
+        for document in discovery_result.files
     ]

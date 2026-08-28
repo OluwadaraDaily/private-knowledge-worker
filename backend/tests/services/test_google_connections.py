@@ -8,6 +8,8 @@ from app.core.config import Settings
 from app.db.models.google_connection import GoogleConnection
 from app.integrations.google.client import GoogleApiError
 from app.integrations.google.interfaces import (
+    GoogleDriveFile,
+    GoogleDriveFilePage,
     GoogleDriveFolder,
     GoogleDriveFolderLister,
     GoogleDriveFolderPage,
@@ -307,6 +309,60 @@ def test_list_all_google_drive_folders_rejects_repeated_page_tokens(
             connection,
             drive_client=fake_drive_client,
         )
+
+
+def test_list_google_drive_documents_reports_partial_page_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class PartialDocumentsClient:
+        calls = 0
+
+        def list_documents(
+            self,
+            _access_token: str,
+            *,
+            page_token: str | None = None,
+            page_size: int = 100,
+        ) -> GoogleDriveFilePage:
+            del page_size
+            self.calls += 1
+            if page_token == "next-page":
+                raise GoogleApiError("temporary discovery failure", kind="transient")
+            return GoogleDriveFilePage(
+                files=(
+                    GoogleDriveFile(
+                        id="doc-1",
+                        name="One",
+                        mime_type="application/vnd.google-apps.document",
+                        parents=("folder",),
+                        created_at=None,
+                        modified_at=None,
+                        web_url=None,
+                    ),
+                ),
+                next_page_token="next-page",
+            )
+
+    monkeypatch.setattr(
+        google_connections_module,
+        "get_valid_google_access_token",
+        lambda *_args: "access-token",
+    )
+    result = google_connections_module.list_google_drive_documents_with_status(
+        cast(Session, FakeSession()),
+        Settings(),
+        GoogleConnection(
+            user_id=UUID(int=0),
+            google_account_id="google-id",
+            email="user@example.com",
+            scopes=[],
+        ),
+        drive_client=PartialDocumentsClient(),
+    )
+
+    assert [document.id for document in result.files] == ["doc-1"]
+    assert result.complete is False
+    assert result.warning is not None
 
 
 def test_verify_google_drive_connection_propagates_credential_failures(

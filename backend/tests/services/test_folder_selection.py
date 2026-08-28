@@ -15,6 +15,7 @@ from app.services.folder_selection import (
     replace_selected_folders,
     validate_selected_folders,
 )
+from app.services.google_connections import GoogleDriveDocumentsResult
 
 
 class ScalarResult:
@@ -128,26 +129,29 @@ def test_discover_selected_docs_follows_nested_folder_scope(
     )
     monkeypatch.setattr(
         document_discovery_module,
-        "list_all_google_drive_documents",
-        lambda *_args: (
-            GoogleDriveFile(
-                id="in-scope",
-                name="In scope",
-                mime_type="application/vnd.google-apps.document",
-                parents=("nested",),
-                created_at=None,
-                modified_at=None,
-                web_url=None,
+        "list_google_drive_documents_with_status",
+        lambda *_args: GoogleDriveDocumentsResult(
+            files=(
+                GoogleDriveFile(
+                    id="in-scope",
+                    name="In scope",
+                    mime_type="application/vnd.google-apps.document",
+                    parents=("nested",),
+                    created_at=None,
+                    modified_at=None,
+                    web_url=None,
+                ),
+                GoogleDriveFile(
+                    id="out-of-scope",
+                    name="Out of scope",
+                    mime_type="application/vnd.google-apps.document",
+                    parents=("other",),
+                    created_at=None,
+                    modified_at=None,
+                    web_url=None,
+                ),
             ),
-            GoogleDriveFile(
-                id="out-of-scope",
-                name="Out of scope",
-                mime_type="application/vnd.google-apps.document",
-                parents=("other",),
-                created_at=None,
-                modified_at=None,
-                web_url=None,
-            ),
+            complete=True,
         ),
     )
 
@@ -158,4 +162,4 @@ def test_discover_selected_docs_follows_nested_folder_scope(
         {"root"},
     )
 
-    assert [document.id for document in discovered] == ["in-scope"]
+    assert [document.id for document in discovered.files] == ["in-scope"]
