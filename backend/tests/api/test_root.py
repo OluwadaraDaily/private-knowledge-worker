@@ -1,9 +1,13 @@
+from typing import cast
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pydantic import AnyHttpUrl
+from sqlalchemy.orm import Session
 
+from app.api.dependencies.google import get_optional_google_connection, require_google_connection
 from app.api.routes import google_auth as google_auth_module
 from app.core.config import Settings
 from app.db.models.google_connection import GoogleConnection
@@ -81,6 +85,20 @@ def test_google_status_reports_disconnected_without_cookie(client: TestClient) -
         "scopes": [],
         "token_expires_at": None,
     }
+
+
+def test_google_connection_dependency_ignores_invalid_cookie() -> None:
+    session = ConnectionSession(None)
+
+    assert get_optional_google_connection(cast(Session, session), "not-a-uuid") is None
+
+
+def test_google_connection_dependency_requires_connection() -> None:
+    with pytest.raises(HTTPException) as error:
+        require_google_connection(None)
+
+    assert error.value.status_code == 401
+    assert error.value.detail == "Google account is not connected"
 
 
 def test_google_status_returns_non_secret_connection_metadata() -> None:

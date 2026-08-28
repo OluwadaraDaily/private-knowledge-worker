@@ -1,13 +1,16 @@
 from typing import Annotated
-from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.api.dependencies.google import (
+    get_optional_google_connection,
+    require_google_connection,
+)
 from app.core.config import get_settings
 from app.db.models.google_connection import GoogleConnection
 from app.db.session import get_session
@@ -111,18 +114,11 @@ def complete_google_oauth(
     summary="Get Google connection status",
 )
 def get_google_connection_status(
-    session: Annotated[Session, Depends(get_session)],
-    google_connection_id: str | None = Cookie(default=None),
+    connection: Annotated[
+        GoogleConnection | None,
+        Depends(get_optional_google_connection),
+    ],
 ) -> GoogleConnectionStatus:
-    if not google_connection_id:
-        return GoogleConnectionStatus(connected=False)
-    try:
-        connection_id = UUID(google_connection_id)
-    except ValueError:
-        return GoogleConnectionStatus(connected=False)
-    connection = session.scalar(
-        select(GoogleConnection).where(GoogleConnection.id == connection_id)
-    )
     if connection is None:
         return GoogleConnectionStatus(connected=False)
     return GoogleConnectionStatus(
@@ -142,21 +138,8 @@ def get_google_connection_status(
 )
 def verify_google_drive(
     session: Annotated[Session, Depends(get_session)],
-    google_connection_id: str | None = Cookie(default=None),
+    connection: Annotated[GoogleConnection, Depends(require_google_connection)],
 ) -> GoogleDriveVerification:
-    if not google_connection_id:
-        raise HTTPException(status_code=401, detail="Google account is not connected")
-    try:
-        connection_id = UUID(google_connection_id)
-    except ValueError as error:
-        raise HTTPException(status_code=401, detail="Google account is not connected") from error
-
-    connection = session.scalar(
-        select(GoogleConnection).where(GoogleConnection.id == connection_id)
-    )
-    if connection is None:
-        raise HTTPException(status_code=401, detail="Google account is not connected")
-
     settings = get_settings()
     try:
         access_token = get_valid_google_access_token(session, settings, connection)
@@ -180,16 +163,14 @@ def verify_google_drive(
 @google_auth_router.delete("", status_code=204, summary="Disconnect Google")
 def disconnect_google(
     session: Annotated[Session, Depends(get_session)],
-    google_connection_id: str | None = Cookie(default=None),
+    connection: Annotated[
+        GoogleConnection | None,
+        Depends(get_optional_google_connection),
+    ],
 ) -> Response:
-    if google_connection_id:
-        try:
-            connection_id = UUID(google_connection_id)
-        except ValueError:
-            connection_id = None
-        if connection_id is not None:
-            session.execute(delete(GoogleConnection).where(GoogleConnection.id == connection_id))
-            session.commit()
+    if connection is not None:
+        session.execute(delete(GoogleConnection).where(GoogleConnection.id == connection.id))
+        session.commit()
     response = Response(status_code=204)
     response.delete_cookie(GOOGLE_CONNECTION_COOKIE)
     return response
