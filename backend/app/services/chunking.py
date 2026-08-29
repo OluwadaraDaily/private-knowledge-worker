@@ -50,3 +50,17 @@ class FixedTokenChunker:
                 break
             start = end - self.chunk_overlap
         return tuple(chunks)
+
+
+BASELINE_FIXED_CONFIGURATIONS = {
+    "fixed-500-50": (500, 50),
+    "fixed-1000-100": (1000, 100),
+}
+
+
+def baseline_fixed_chunker(name: str) -> FixedTokenChunker:
+    """Return a fixed-token chunker for one of the supported V1 baselines."""
+    configuration = BASELINE_FIXED_CONFIGURATIONS.get(name)
+    if configuration is None:
+        raise ValueError(f"Unknown baseline chunking configuration: {name}")
+    return FixedTokenChunker(*configuration)
