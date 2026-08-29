@@ -30,15 +30,19 @@ def _parse_document(payload: object, requested_document_id: str) -> GoogleDocsDo
     title = payload.get("title")
     body = payload.get("body")
     content = body.get("content") if isinstance(body, dict) else None
+    lists = payload.get("lists", [])
     if (
         document_id != requested_document_id
         or not isinstance(title, str)
         or not isinstance(content, list)
         or not all(isinstance(element, dict) for element in content)
+        or not isinstance(lists, list)
+        or not all(isinstance(document_list, dict) for document_list in lists)
     ):
         raise GoogleApiError("Google Docs returned invalid document metadata", kind="malformed")
     return GoogleDocsDocument(
         document_id=document_id,
         title=title,
         body_content=tuple(content),
+        lists=tuple(lists),
     )

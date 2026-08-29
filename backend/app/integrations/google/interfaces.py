@@ -91,6 +91,7 @@ class GoogleDocsDocument:
     document_id: str
     title: str
     body_content: tuple[dict[str, object], ...]
+    lists: tuple[dict[str, object], ...] = ()
 
 
 class GoogleDocsDocumentFetcher(Protocol):
