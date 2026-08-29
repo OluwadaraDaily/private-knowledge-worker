@@ -4,6 +4,7 @@ from app.services.chunking import (
     BASELINE_FIXED_CONFIGURATIONS,
     DocumentChunk,
     FixedTokenChunker,
+    HeadingAwareChunker,
     baseline_fixed_chunker,
 )
 
@@ -49,3 +50,29 @@ def test_baseline_fixed_configurations_have_reproducible_parameters() -> None:
 def test_baseline_fixed_chunker_rejects_unknown_configuration() -> None:
     with pytest.raises(ValueError, match="Unknown baseline"):
         baseline_fixed_chunker("unknown")
+
+
+def test_heading_aware_chunker_preserves_heading_context_and_budget() -> None:
+    chunks = HeadingAwareChunker(max_tokens=4).chunk(
+        "# Introduction\none two\nthree four\n\n## Details\nfive six"
+    )
+
+    assert chunks == (
+        DocumentChunk(0, "one two three four", 4, "Introduction"),
+        DocumentChunk(1, "five six", 2, "Details"),
+    )
+
+
+def test_heading_aware_chunker_splits_oversized_paragraphs() -> None:
+    chunks = HeadingAwareChunker(max_tokens=2).chunk("one two three four five")
+
+    assert chunks == (
+        DocumentChunk(0, "one two", 2),
+        DocumentChunk(1, "three four", 2),
+        DocumentChunk(2, "five", 1),
+    )
+
+
+def test_heading_aware_chunker_rejects_nonpositive_budget() -> None:
+    with pytest.raises(ValueError, match="max_tokens"):
+        HeadingAwareChunker(0)

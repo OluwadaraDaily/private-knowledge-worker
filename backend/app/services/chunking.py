@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -9,6 +10,7 @@ class DocumentChunk:
     chunk_number: int
     content: str
     token_count: int
+    heading: str | None = None
 
 
 class Chunker(Protocol):
@@ -49,6 +51,60 @@ class FixedTokenChunker:
             if end == len(tokens):
                 break
             start = end - self.chunk_overlap
+        return tuple(chunks)
+
+
+class HeadingAwareChunker:
+    """Pack canonical paragraphs by heading while respecting a token budget."""
+
+    _heading_pattern = re.compile(r"^(#{1,6})\s+(.+)$")
+
+    def __init__(self, max_tokens: int = 800) -> None:
+        if max_tokens <= 0:
+            raise ValueError("max_tokens must be positive")
+        self.max_tokens = max_tokens
+
+    def chunk(self, content: str) -> tuple[DocumentChunk, ...]:
+        chunks: list[DocumentChunk] = []
+        current_tokens: list[str] = []
+        current_heading: str | None = None
+
+        def flush() -> None:
+            if current_tokens:
+                chunks.append(
+                    DocumentChunk(
+                        chunk_number=len(chunks),
+                        content=" ".join(current_tokens),
+                        token_count=len(current_tokens),
+                        heading=current_heading,
+                    )
+                )
+
+        for line in content.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            heading_match = self._heading_pattern.match(stripped)
+            if heading_match:
+                flush()
+                current_tokens.clear()
+                current_heading = heading_match.group(2).strip()
+                continue
+
+            paragraph_tokens = stripped.split()
+            while paragraph_tokens:
+                available = self.max_tokens - len(current_tokens)
+                if available == 0:
+                    flush()
+                    current_tokens.clear()
+                    continue
+                current_tokens.extend(paragraph_tokens[:available])
+                del paragraph_tokens[:available]
+                if paragraph_tokens:
+                    flush()
+                    current_tokens.clear()
+
+        flush()
         return tuple(chunks)
 
 
