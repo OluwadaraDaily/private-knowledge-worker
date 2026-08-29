@@ -1,6 +1,7 @@
 """Add document enrichment fields."""
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0013_add_document_enrichment"
