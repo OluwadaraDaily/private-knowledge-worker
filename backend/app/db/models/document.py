@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Boolean, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import JSON, Boolean, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -29,6 +29,12 @@ class Document(Base):
     )
     content_hash: Mapped[str | None] = mapped_column(String(64))
     document_type: Mapped[str | None] = mapped_column(String(100))
+    topics: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default="[]"
+    )
+    summary: Mapped[str | None] = mapped_column(Text)
+    classification_method: Mapped[str | None] = mapped_column(String(100))
+    classified_at: Mapped[datetime | None] = timestamp_column()
     indexed_at: Mapped[datetime | None] = timestamp_column()
     created_at: Mapped[datetime] = created_at_column()
     updated_at: Mapped[datetime] = updated_at_column()
