@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.db.models.document import Document
 from app.db.models.document_content import DocumentContent
 from app.integrations.google.interfaces import GoogleDriveFile
+from app.services.document_classification import DocumentClassification
 
 
 def persist_document_and_content(
@@ -18,6 +19,7 @@ def persist_document_and_content(
     canonical_text: str,
     *,
     extracted_at: datetime | None = None,
+    classification: DocumentClassification | None = None,
 ) -> tuple[Document, DocumentContent]:
     """Upsert Drive metadata and its canonical content in one transaction."""
     content_hash = hashlib.sha256(canonical_text.encode("utf-8")).hexdigest()
@@ -38,6 +40,12 @@ def persist_document_and_content(
     document.google_modified_at = drive_file.modified_at
     document.owned_by_me = True
     document.content_hash = content_hash
+    if classification is not None:
+        document.document_type = classification.document_type
+        document.topics = list(classification.topics)
+        document.summary = classification.summary
+        document.classification_method = classification.method
+        document.classified_at = classification.classified_at
 
     try:
         session.flush()
