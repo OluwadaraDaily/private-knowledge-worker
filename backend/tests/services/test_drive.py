@@ -370,3 +370,16 @@ def test_google_docs_client_returns_raw_structural_content(
     assert document.document_id == "doc-1"
     assert document.title == "Research notes"
     assert document.body_content == ({"startIndex": 1, "paragraph": {}},)
+
+
+def test_google_docs_client_accepts_an_empty_document(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_client = FakeClient(
+        FakeResponse(200, {"documentId": "doc-1", "title": "Empty", "body": {"content": []}})
+    )
+    monkeypatch.setattr(httpx, "Client", lambda timeout: fake_client)
+
+    document = GoogleDocsClient().get_document("access-token", "doc-1")
+
+    assert document.body_content == ()

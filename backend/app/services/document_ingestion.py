@@ -1,3 +1,4 @@
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
@@ -63,3 +64,29 @@ def ingest_google_document(
     except (OSError, ValueError):
         return DocumentIngestionResult(drive_file.id, "failed", "processing")
     return DocumentIngestionResult(drive_file.id, "succeeded")
+
+
+def ingest_google_documents(
+    session: Session,
+    settings: Settings,
+    connection: GoogleConnection,
+    drive_files: Iterable[GoogleDriveFile],
+    folder_names_by_document: Mapping[str, tuple[str, ...]] | None = None,
+    *,
+    docs_client: GoogleDocsDocumentFetcher | None = None,
+    classifier: DocumentClassifier | None = None,
+) -> tuple[DocumentIngestionResult, ...]:
+    """Ingest all supplied documents while retaining per-document failures."""
+    folders = folder_names_by_document or {}
+    return tuple(
+        ingest_google_document(
+            session,
+            settings,
+            connection,
+            drive_file,
+            folders.get(drive_file.id, ()),
+            docs_client=docs_client,
+            classifier=classifier,
+        )
+        for drive_file in drive_files
+    )

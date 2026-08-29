@@ -70,3 +70,44 @@ def test_ingest_google_document_returns_safe_provider_failure(
     )
 
     assert result == ingestion.DocumentIngestionResult("doc-1", "failed", "transient")
+
+
+def test_ingest_google_documents_keeps_successes_when_one_document_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_ingest(
+        _session: Session,
+        _settings: Settings,
+        _connection: GoogleConnection,
+        drive_file: GoogleDriveFile,
+        _folder_names: tuple[str, ...] = (),
+        **_kwargs: object,
+    ) -> ingestion.DocumentIngestionResult:
+        if drive_file.id == "doc-1":
+            return ingestion.DocumentIngestionResult(drive_file.id, "failed", "transient")
+        return ingestion.DocumentIngestionResult(drive_file.id, "succeeded")
+
+    monkeypatch.setattr(ingestion, "ingest_google_document", fake_ingest)
+
+    results = ingestion.ingest_google_documents(
+        cast(Session, object()),
+        Settings(),
+        _connection(),
+        (
+            _drive_file(),
+            GoogleDriveFile(
+                "doc-2",
+                "Other",
+                "application/vnd.google-apps.document",
+                (),
+                None,
+                None,
+                None,
+            ),
+        ),
+    )
+
+    assert results == (
+        ingestion.DocumentIngestionResult("doc-1", "failed", "transient"),
+        ingestion.DocumentIngestionResult("doc-2", "succeeded"),
+    )
