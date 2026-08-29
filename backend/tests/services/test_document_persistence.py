@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from typing import cast
 from uuid import UUID
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db.models.document import Document
@@ -39,6 +40,18 @@ class FakeSession:
 
     def rollback(self) -> None:
         raise AssertionError("rollback was not expected")
+
+
+class FailingCommitSession(FakeSession):
+    def __init__(self) -> None:
+        super().__init__(None, None)
+        self.rollbacks = 0
+
+    def commit(self) -> None:
+        raise SQLAlchemyError("database unavailable")
+
+    def rollback(self) -> None:
+        self.rollbacks += 1
 
 
 def _drive_file() -> GoogleDriveFile:
@@ -84,3 +97,29 @@ def test_persist_document_and_content_updates_existing_rows_idempotently() -> No
     assert document.title == "Research notes"
     assert content.content == "Updated"
     assert session.commits == 1
+
+
+def test_persist_document_and_content_hashes_the_complete_canonical_text() -> None:
+    session = FakeSession(None, None)
+
+    document, content = persist_document_and_content(
+        cast(Session, session), UUID(int=2), _drive_file(), "# Title\nOne paragraph"
+    )
+
+    assert document.content_hash == (
+        "e62652c1251f01b3341aa43d67eed30c730fc1f5bca6a9031a5c59fd24aaa075"
+    )
+    assert content.content_hash == document.content_hash
+
+
+def test_persist_document_and_content_rolls_back_when_commit_fails() -> None:
+    session = FailingCommitSession()
+
+    try:
+        persist_document_and_content(cast(Session, session), UUID(int=2), _drive_file(), "Content")
+    except SQLAlchemyError:
+        pass
+    else:
+        raise AssertionError("expected the database error to be raised")
+
+    assert session.rollbacks == 1
